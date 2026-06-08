@@ -1,0 +1,21 @@
+# Build output
+/build/
+/out/
+[Bb]uild/
+cmake-build-*/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+CMakeSettings.json
+CMakeUserPresets.json
+compile_commands.json
+
+# MSVC intermediates
+*.obj
+*.pdb
+*.ilk
+*.exp
+
+# NOTE: third_party/ is intentionally committed (vendored dependencies).
