@@ -1,0 +1,55 @@
+{
+  "version": 1,
+
+  "emissionMode": 0,
+  "spawnRate": 2000,
+  "burstCount": 32,
+  "burstInterval": 0,
+  "startDelay": 0,
+  "duration": 0,
+
+  "emissionShape": 3,
+  "emissionShapeSize": [0.5, 0.5, 0.5],
+  "shapeDirection": 0,
+
+  "spread": 0.4,
+  "speed": [8, 16],
+  "lifetime": [1.0, 2.0],
+  "size": [0.15, 0.3],
+
+  "drag": 1.0,
+  "noiseStrength": 6,
+  "noiseScale": 8,
+  "noiseScrollSpeed": 4,
+
+  "colour": [1, 1, 1, 1],
+  "blendMode": 0,
+
+  "useCollision": true,
+  "restitution": 0.3,
+
+  "useAttractor": false,
+  "attractorStrength": 0,
+  "attractorOffset": [0, 0, 0],
+
+  "gravity": [0, -9.8, 0],
+
+  "texture": "",
+  "frameCount": 1,
+  "animMode": 0,
+  "animFps": 12,
+  "velocityStretch": 0,
+
+  "active": true,
+
+  "colourOverLife": [
+    { "t": 0.0,  "rgba": [1.5, 1.2, 0.4, 0.0], "ease": 0 },
+    { "t": 0.15, "rgba": [1.5, 0.8, 0.2, 1.0], "ease": 1 },
+    { "t": 1.0,  "rgba": [0.4, 0.05, 0.0, 0.0], "ease": 1 }
+  ],
+
+  "sizeOverLife": [
+    { "t": 0.0, "v": 1.0, "ease": 0 },
+    { "t": 1.0, "v": 0.25, "ease": 1 }
+  ]
+}
