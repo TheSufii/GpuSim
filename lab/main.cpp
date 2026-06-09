@@ -9,7 +9,8 @@
 #include <gpusim/EmitterDesc.h>
 #include <gpusim/EmitterDescJson.h>
 #include <gpusim/ShaderPreprocessor.h>
-#include <gpusim/EmitterWidgets.h> 
+#include <gpusim/EmitterWidgets.h>
+#include <gpusim/Flipbook.h>   // shared _NxM flipbook convention
 
 #include <glm/glm.hpp>
 #include "OrbitCamera.h"
@@ -18,6 +19,7 @@
 #include <stb_image_resize2.h>
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <fstream>
@@ -91,6 +93,50 @@ bool LoadPixels(const char* path, uint32_t res, std::vector<unsigned char>& out)
     stbir_resize_uint8_linear(data, w, h, 0, out.data(), res, res, 0, STBIR_RGBA);
     stbi_image_free(data);
     return true;
+}
+
+// Slice a "_NxM" spritesheet into cols*rows frames, appending each as a separate
+// res×res layer to `out` in reading order (frame 0 = top-left). Mirrors the
+// engine's TextureCooker::CookFlipbook. Returns frames added, or 0 on failure.
+static int LoadFlipbookFrames(const char* path, uint32_t res, int cols, int rows,
+                              std::vector<LoadedTexture>& out)
+{
+    // Flip on load like LoadPixels, so each extracted block matches the GL
+    // bottom-row-first orientation the single-texture path produces.
+    int w = 0, h = 0, ch = 0;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* data = stbi_load(path, &w, &h, &ch, 4);
+    if (!data) { std::fprintf(stderr, "[lab] flipbook load failed: %s (%s)\n",
+                              path, stbi_failure_reason()); return 0; }
+
+    int frameW = w / cols;
+    int frameH = h / rows;
+    std::string stem = fs::path(path).stem().string();
+
+    std::vector<unsigned char> framePixels((size_t)frameW * frameH * 4);
+    std::vector<unsigned char> resized((size_t)res * res * 4);
+    int added = 0;
+
+    // Emit in reading order. Flip-on-load puts the sheet's top grid row in the
+    // LAST memory block, so animation row gr reads memory block (rows-1-gr).
+    for (int gr = 0; gr < rows; ++gr) {
+        int br = rows - 1 - gr;
+        for (int gc = 0; gc < cols; ++gc) {
+            for (int y = 0; y < frameH; ++y) {
+                int srcY = br * frameH + y;
+                std::memcpy(framePixels.data() + (size_t)y * frameW * 4,
+                            data + ((size_t)srcY * w + (size_t)gc * frameW) * 4,
+                            (size_t)frameW * 4);
+            }
+            stbir_resize_uint8_linear(framePixels.data(), frameW, frameH, 0,
+                                      resized.data(), (int)res, (int)res, 0, STBIR_RGBA);
+            LoadedTexture t; t.name = gpusim::FlipbookFrameName(stem, gr * cols + gc); t.px = resized;
+            out.push_back(std::move(t));
+            ++added;
+        }
+    }
+    stbi_image_free(data);
+    return added;
 }
 
 // (Re)build the world's texture array from the registry: layer i = textures[i].
@@ -324,9 +370,26 @@ int main(int, char**)
         emitterFiles = ScanAssets(".emitter");
     };
     // Find a texture in the registry by name, or load assets/<name>.png into it.
-    // Returns its layer index, or -1 on failure.
+    // For flipbook spritesheets (_NxM suffix) all frames are loaded as contiguous layers.
+    // Returns the base layer index, or -1 on failure.
     auto loadTexture = [&](const std::string& fname) -> int {
         std::string name = fs::path(fname).stem().string();
+
+        int cols, rows;
+        if (gpusim::ParseFlipbookDims(name, cols, rows)) {
+            // dedup: check if first frame is already present
+            std::string f0 = gpusim::FlipbookFrameName(name, 0);
+            for (int i = 0; i < (int)textures.size(); ++i)
+                if (textures[i].name == f0) return i;
+
+            std::string full = (fs::path(GPUSIM_LAB_ASSET_DIR) / (name + ".png")).string();
+            int base = (int)textures.size();
+            int added = LoadFlipbookFrames(full.c_str(), 256, cols, rows, textures);
+            if (added == 0) return -1;
+            RebuildTextureArray(world, textures);
+            return base;
+        }
+
         for (int i = 0; i < (int)textures.size(); ++i)
             if (textures[i].name == name) return i;           // dedup
         LoadedTexture t; t.name = name;
@@ -361,14 +424,24 @@ int main(int, char**)
         catch (const std::exception& e) { std::fprintf(stderr, "[lab] bad emitter json %s: %s\n", fname.c_str(), e.what()); return; }
         std::string tex;
         EmitterDescFromJson(j, en.desc, tex);
-        int layer = tex.empty() ? -1 : loadTexture(tex);     // resolve the name into the registry
+        int layer = tex.empty() ? -1 : loadTexture(tex);
         en.desc.textureLayer = (layer >= 0) ? (uint32_t)layer : kNoTexture;
+        // auto-set frameCount from the _NxM filename convention
+        if (!tex.empty()) {
+            int cols, rows;
+            if (gpusim::ParseFlipbookDims(fs::path(tex).stem().string(), cols, rows))
+                en.desc.frameCount = (uint32_t)(cols * rows);
+        }
         en.ptr->Configure(en.desc);
     };
     auto saveEmitter = [&](const EmitterEntry& en, const std::string& fname) {
         std::string tex;                                      // portable name of the emitter's texture
-        if (en.desc.textureLayer != kNoTexture && en.desc.textureLayer < textures.size())
+        if (en.desc.textureLayer != kNoTexture && en.desc.textureLayer < textures.size()) {
             tex = textures[en.desc.textureLayer].name;
+            // a flipbook emitter points at frame 0 ("<sheet>_f000"); write the sheet
+            // name back so reload re-slices and re-derives frameCount from "_NxM".
+            if (en.desc.frameCount > 1) tex = gpusim::FlipbookStemFromFrame(tex);
+        }
         std::ofstream out(fs::path(GPUSIM_LAB_ASSET_DIR) / fname);
         if (!out) { std::fprintf(stderr, "[lab] cannot write %s\n", fname.c_str()); return; }
         out << EmitterDescToJson(en.desc, tex).dump(2);
