@@ -9,11 +9,6 @@ layout(std430, binding = BIND_DEADCOUNT) coherent buffer DeadCountBuf { uint dea
 
 layout(binding = 0) uniform sampler2D u_depthBuffer;   // DepthTextureUnit
 
-const float k_collisionThickness = 0.75; 
-
-const float k_separation         = 0.02; 
-
-
 vec3 worldFromUV(vec2 uv, float d)
 {
     vec4 clip = vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
@@ -29,6 +24,9 @@ void main()
 
     EmitterData em = emitters[particles[i].emitterIndex];
     if (em.useCollision == 0u)        return;
+
+    float thickness  = em.collisionParams.x;
+    float separation = em.collisionParams.y;
 
     vec3 pos  = particles[i].position.xyz;
     vec4 clip = u_proj * u_view * vec4(pos, 1.0);
@@ -47,7 +45,7 @@ void main()
     vec3 sWorld = worldFromUV(uv, sceneDepth);
 
     // thickness gate � skip if merely occluded by something closer, not actually touching
-    if (distance(pos, sWorld) > k_collisionThickness) return;
+    if (distance(pos, sWorld) > thickness) return;
 
     // real geometric normal from two reconstructed surface tangents
     vec2 texel = 1.0 / vec2(textureSize(u_depthBuffer, 0));
@@ -71,5 +69,5 @@ void main()
     else if (dot(vel, n) < 0.0)
         particles[i].velocity = vec4(reflected, 0.0);
 
-    particles[i].position.xyz = pos + n * k_separation;
+    particles[i].position.xyz = pos + n * separation;
 }

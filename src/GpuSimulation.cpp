@@ -2,6 +2,7 @@
 #include "SimBindings.h"
 #include "ShaderPreprocessor.h"
 #include <cassert>
+#include <cstdio>
 #include <utility>
 
 GpuSimulation::~GpuSimulation()
@@ -153,13 +154,17 @@ GLuint GpuSimulation::LoadComputeShader(const std::string& path)
     glCompileShader(shader);
     GLint ok = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
-    if (!ok) { char log[1024]; glGetShaderInfoLog(shader, 1024, nullptr, log); assert(false && log); }
+    if (!ok) { char log[1024]; glGetShaderInfoLog(shader, 1024, nullptr, log);
+               std::fprintf(stderr, "GpuSimulation: compute compile failed (%s):\n%s\n", path.c_str(), log);
+               assert(false && "compute shader compile failed"); }
 
     GLuint program = glCreateProgram();
     glAttachShader(program, shader);
     glLinkProgram(program);
     glGetProgramiv(program, GL_LINK_STATUS, &ok);
-    if (!ok) { char log[1024]; glGetProgramInfoLog(program, 1024, nullptr, log); assert(false && log); }
+    if (!ok) { char log[1024]; glGetProgramInfoLog(program, 1024, nullptr, log);
+               std::fprintf(stderr, "GpuSimulation: compute link failed (%s):\n%s\n", path.c_str(), log);
+               assert(false && "compute shader link failed"); }
 
     glDeleteShader(shader);
     return program;

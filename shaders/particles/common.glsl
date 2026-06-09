@@ -30,7 +30,7 @@
 // ---- structs (must match std430 layout in ParticleTypes.h) ----
 struct Particle
 {
-    vec4  position;     // xyz = world pos
+    vec4  position;     // xyz = world pos, w = packed per-particle tint (packUnorm4x8; 0 = neutral)
     vec4  velocity;     // xyz = world vel
     float lifetime;
     float maxLifetime;
@@ -77,6 +77,9 @@ struct EmitterData
     float shapeDirection;    // 0 = launch along direction, 1 = radial out from shape
 
     vec4  emissionShape;     // x = EmissionShape, yzw = size (radius / half-extents)
+
+    vec4  colourVariance;    // rgb = per-channel random ± amount at spawn (0 = none); w reserved
+    vec4  collisionParams;   // x = thickness gate, y = surface separation; zw reserved
 };
 
 struct SortEntry { uint particleIndex; uint depthBits; };

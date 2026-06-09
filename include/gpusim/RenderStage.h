@@ -51,6 +51,12 @@ public:
     explicit ParticleBillboardRenderStage(GLuint shader) : m_shader(shader)
     {
         assert(shader != 0 && "ParticleBillboardRenderStage: invalid shader");
+        // cache uniform locations once — they never change for a linked program
+        m_uNear            = glGetUniformLocation(shader, "u_near");
+        m_uFar             = glGetUniformLocation(shader, "u_far");
+        m_uSoftFadeDist    = glGetUniformLocation(shader, "u_softFadeDist");
+        m_uSoftEnabled     = glGetUniformLocation(shader, "u_softEnabled");
+        m_uHasTextureArray = glGetUniformLocation(shader, "u_hasTextureArray");
     }
 
     void Render(const RenderContext& ctx) override
@@ -66,14 +72,14 @@ public:
 
         // soft particles: bind scene depth + linearization params
         glBindTextureUnit(SimBindings::DepthTextureUnit, ctx.depthTexture);
-        SetUniform("u_near", ctx.nearPlane);
-        SetUniform("u_far", ctx.farPlane);
-        SetUniform("u_softFadeDist", ctx.softFadeDist);
-        SetUniform("u_softEnabled", ctx.depthTexture != 0 ? 1u : 0u);
+        if (m_uNear         != -1) glUniform1f(m_uNear, ctx.nearPlane);
+        if (m_uFar          != -1) glUniform1f(m_uFar, ctx.farPlane);
+        if (m_uSoftFadeDist != -1) glUniform1f(m_uSoftFadeDist, ctx.softFadeDist);
+        if (m_uSoftEnabled  != -1) glUniform1ui(m_uSoftEnabled, ctx.depthTexture != 0 ? 1u : 0u);
 
         // particle texture array (sampler2DArray). if absent, shader uses procedural circle.
         glBindTextureUnit(SimBindings::ParticleTextureUnit, ctx.textureArray);
-        SetUniform("u_hasTextureArray", ctx.textureArray != 0 ? 1u : 0u);
+        if (m_uHasTextureArray != -1) glUniform1ui(m_uHasTextureArray, ctx.textureArray != 0 ? 1u : 0u);
 
         // lifetime LUT atlases (colour/alpha sampled in frag, size in vert)
         glBindTextureUnit(SimBindings::LutColourUnit, ctx.lutColour);
@@ -97,16 +103,6 @@ public:
     }
 
 private:
-    void SetUniform(const char* name, float v)
-    {
-        GLint l = glGetUniformLocation(m_shader, name);
-        if (l != -1) glUniform1f(l, v);
-    }
-    void SetUniform(const char* name, uint32_t v)
-    {
-        GLint l = glGetUniformLocation(m_shader, name);
-        if (l != -1) glUniform1ui(l, v);
-    }
-
     GLuint m_shader;
+    GLint  m_uNear = -1, m_uFar = -1, m_uSoftFadeDist = -1, m_uSoftEnabled = -1, m_uHasTextureArray = -1;
 };

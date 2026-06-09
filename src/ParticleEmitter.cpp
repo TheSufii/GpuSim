@@ -9,10 +9,13 @@ void ParticleEmitter::SetNoiseStrength(float s) { m_noiseStrength = s; }
 void ParticleEmitter::SetNoiseScale(float s) { m_noiseScale = s; }
 void ParticleEmitter::SetNoiseScrollSpeed(float s) { m_noiseScrollSpeed = s; }
 void ParticleEmitter::SetColour(const glm::vec4& c) { m_colour = c; }
+void ParticleEmitter::SetColourVariance(const glm::vec3& v) { m_colourVariance = v; }
 void ParticleEmitter::SetBlendMode(BlendMode m) { m_blendMode = m; }
 void ParticleEmitter::SetUseAttractor(bool b) { m_useAttractor = b; }
 void ParticleEmitter::SetUseCollision(bool b) { m_useCollision = b; }
 void ParticleEmitter::SetRestitution(float r) { m_restitution = r; }
+void ParticleEmitter::SetCollisionThickness(float t) { m_collisionThickness = t; }
+void ParticleEmitter::SetCollisionSeparation(float s) { m_collisionSeparation = s; }
 void ParticleEmitter::SetActive(bool b) { m_active = b; }
 void ParticleEmitter::SetWorldPosition(const glm::vec3& v) { m_worldPosition = v; }
 void ParticleEmitter::SetWorldDirection(const glm::vec3& v) { m_worldDirection = v; }
@@ -93,6 +96,8 @@ GpuEmitterData ParticleEmitter::BuildGpuData(float deltaTime)
     d.shapeDirection = m_shapeDirection;
     d.emissionShape = glm::vec4(float(static_cast<uint32_t>(m_emissionShape)),
                                 m_emissionShapeSize.x, m_emissionShapeSize.y, m_emissionShapeSize.z);
+    d.colourVariance = glm::vec4(m_colourVariance, 0.f);
+    d.collisionParams = glm::vec4(m_collisionThickness, m_collisionSeparation, 0.f, 0.f);
     return d;
 }
 
@@ -115,9 +120,12 @@ void ParticleEmitter::Configure(const EmitterDesc& desc)
     m_noiseScale       = desc.noiseScale;
     m_noiseScrollSpeed = desc.noiseScrollSpeed;
     m_colour           = desc.colour;
+    m_colourVariance   = desc.colourVariance;
     m_blendMode        = desc.blendMode;
     m_useCollision     = desc.useCollision;
     m_restitution      = desc.restitution;
+    m_collisionThickness  = desc.collisionThickness;
+    m_collisionSeparation = desc.collisionSeparation;
     m_useAttractor     = desc.useAttractor;
     m_attractorStrength = desc.attractorStrength;
     m_gravity          = desc.gravity;
@@ -160,9 +168,12 @@ EmitterDesc ParticleEmitter::ToDesc() const
     d.noiseScale       = m_noiseScale;
     d.noiseScrollSpeed = m_noiseScrollSpeed;
     d.colour           = m_colour;
+    d.colourVariance   = m_colourVariance;
     d.blendMode        = m_blendMode;
     d.useCollision     = m_useCollision;
     d.restitution      = m_restitution;
+    d.collisionThickness  = m_collisionThickness;
+    d.collisionSeparation = m_collisionSeparation;
     d.useAttractor     = m_useAttractor;
     d.attractorStrength = m_attractorStrength;
     d.gravity          = m_gravity;

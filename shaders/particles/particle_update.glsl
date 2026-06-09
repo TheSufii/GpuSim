@@ -33,6 +33,6 @@ void main()
     }
 
     pos += vel * u_deltaTime;
-    particles[i].position = vec4(pos, 0.0);
+    particles[i].position.xyz = pos;          // preserve .w (packed per-particle tint)
     particles[i].velocity = vec4(vel, 0.0);
 }

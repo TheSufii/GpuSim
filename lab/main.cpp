@@ -51,7 +51,8 @@ GLuint CompileStage(GLenum type, const std::string& src, const char* tag)
     GLint ok = 0;
     glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
     if (!ok) { char log[4096]; glGetShaderInfoLog(s, sizeof(log), nullptr, log);
-               std::fprintf(stderr, "[lab] %s compile failed:\n%s\n", tag, log); }
+               std::fprintf(stderr, "[lab] %s compile failed:\n%s\n", tag, log);
+               glDeleteShader(s); return 0; }
     return s;
 }
 
@@ -64,16 +65,19 @@ GLuint CompileBillboard(const fs::path& shaderDir)
 
     GLuint vs = CompileStage(GL_VERTEX_SHADER,   v.source, "billboard.vert");
     GLuint fs = CompileStage(GL_FRAGMENT_SHADER, f.source, "billboard.frag");
+    if (vs == 0 || fs == 0) { if (vs) glDeleteShader(vs); if (fs) glDeleteShader(fs); return 0; }
+
     GLuint prog = glCreateProgram();
     glAttachShader(prog, vs);
     glAttachShader(prog, fs);
     glLinkProgram(prog);
     GLint ok = 0;
     glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-    if (!ok) { char log[4096]; glGetProgramInfoLog(prog, sizeof(log), nullptr, log);
-               std::fprintf(stderr, "[lab] billboard link failed:\n%s\n", log); }
     glDeleteShader(vs);
     glDeleteShader(fs);
+    if (!ok) { char log[4096]; glGetProgramInfoLog(prog, sizeof(log), nullptr, log);
+               std::fprintf(stderr, "[lab] billboard link failed:\n%s\n", log);
+               glDeleteProgram(prog); return 0; }
     return prog;
 }
 
@@ -140,7 +144,8 @@ static int LoadFlipbookFrames(const char* path, uint32_t res, int cols, int rows
 }
 
 // (Re)build the world's texture array from the registry: layer i = textures[i].
-// (Leaks the previous GL array — acceptable for an authoring tool.)
+// CreateTextureArray frees the previously-owned array, so repeated rebuilds while
+// authoring don't leak.
 void RebuildTextureArray(ParticleWorld& world, const std::vector<LoadedTexture>& texs, uint32_t res = 256)
 {
     if (texs.empty()) return;   // nothing bound → emitters fall back to procedural
@@ -197,6 +202,7 @@ GLuint CompileProgram(const char* vs, const char* fs)
 {
     GLuint v = CompileStage(GL_VERTEX_SHADER,   vs, "ground.vert");
     GLuint f = CompileStage(GL_FRAGMENT_SHADER, fs, "ground.frag");
+    if (v == 0 || f == 0) { if (v) glDeleteShader(v); if (f) glDeleteShader(f); return 0; }
     GLuint p = glCreateProgram();
     glAttachShader(p, v); glAttachShader(p, f); glLinkProgram(p);
     GLint ok = 0; glGetProgramiv(p, GL_LINK_STATUS, &ok);
@@ -267,6 +273,7 @@ void DrawEmitterProperties(EmitterEntry& en, const std::vector<LoadedTexture>& t
     if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
         ch |= ImGui::ColorEdit4("colour", &d.colour.x,
                                 ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_AlphaBar);
+        ch |= ImGui::DragFloat3("colour variance", &d.colourVariance.x, 0.005f, 0.f, 1.f);
         int bl = (int)d.blendMode;
         if (ImGui::Combo("blend", &bl, "Additive\0AlphaBlend\0")) { d.blendMode = (BlendMode)bl; ch = true; }
 
@@ -298,6 +305,8 @@ void DrawEmitterProperties(EmitterEntry& en, const std::vector<LoadedTexture>& t
     if (ImGui::CollapsingHeader("Collision & attractor")) {
         ch |= ImGui::Checkbox("collision", &d.useCollision);
         ch |= ImGui::DragFloat("restitution", &d.restitution, 0.01f, 0.f, 1.f);
+        ch |= ImGui::DragFloat("coll. thickness", &d.collisionThickness, 0.01f, 0.01f, 10.f);
+        ch |= ImGui::DragFloat("coll. separation", &d.collisionSeparation, 0.005f, 0.f, 1.f);
         ch |= ImGui::Checkbox("attractor", &d.useAttractor);
         ch |= ImGui::DragFloat("attractor strength", &d.attractorStrength, 0.05f);
         ch |= ImGui::DragFloat3("attractor offset", &d.attractorOffset.x, 0.05f);
@@ -352,6 +361,10 @@ int main(int, char**)
 
     // ---- Particle world -----------------------------------------------------
     GLuint billboard = CompileBillboard(GPUSIM_LAB_SHADER_DIR);
+    if (billboard == 0) {
+        std::fprintf(stderr, "[lab] fatal: billboard shader failed to build — see errors above\n");
+        return 1;
+    }
 
     ParticleWorld world;
     world.Initialize(kMaxParticles, GPUSIM_LAB_SHADER_DIR);
@@ -467,6 +480,9 @@ int main(int, char**)
     float softFade = 2.0f;
     world.SetSoftFadeDistance(softFade);
 
+    bool paused   = false;   // freeze the simulation (space); render still runs
+    bool stepOnce = false;   // advance exactly one frame while paused
+
     // ---- Main loop ----------------------------------------------------------
     uint64_t prev = SDL_GetPerformanceCounter();
     const double freq = (double)SDL_GetPerformanceFrequency();
@@ -483,6 +499,9 @@ int main(int, char**)
         {
             ImGui_ImplSDL3_ProcessEvent(&ev);
             if (ev.type == SDL_EVENT_QUIT) running = false;
+            else if (ev.type == SDL_EVENT_KEY_DOWN && !io.WantCaptureKeyboard &&
+                     ev.key.key == SDLK_SPACE && !ev.key.repeat)
+                paused = !paused;
             else if (ev.type == SDL_EVENT_MOUSE_MOTION && !io.WantCaptureMouse &&
                      (ev.motion.state & SDL_BUTTON_LMASK))
                 cam.orbit(-ev.motion.xrel * 0.005f, -ev.motion.yrel * 0.005f);
@@ -518,6 +537,13 @@ int main(int, char**)
         ImGui::Text("alive %u / %u  (%.1f%%)", aliveCount, kMaxParticles,
                     100.f * float(aliveCount) / float(kMaxParticles));
         ImGui::Text("spawned %u / frame", world.GetLastSpawnCount());
+
+        ImGui::SeparatorText("Simulation");
+        ImGui::Checkbox("paused (space)", &paused);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!paused);
+        if (ImGui::Button("step")) stepOnce = true;
+        ImGui::EndDisabled();
 
         ImGui::SeparatorText("Ground");
         ImGui::Checkbox("ground plane + collision", &groundOn);
@@ -626,7 +652,11 @@ int main(int, char**)
             glDrawArrays(GL_TRIANGLES, 0, 6);
         }
 
-        world.Dispatch(dt);
+        // paused → freeze (dt 0); "step" advances one fixed frame. wall-clock dt
+        // still drives the camera and the alive-count readback above.
+        float simDt = paused ? (stepOnce ? (1.f / 60.f) : 0.f) : dt;
+        stepOnce = false;
+        world.Dispatch(simDt);
         world.Render();
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
