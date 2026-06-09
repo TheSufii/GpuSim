@@ -24,11 +24,14 @@ public:
     void SetNoiseScale(float s);
     void SetNoiseScrollSpeed(float s);
     void SetColour(const glm::vec4& c);
+    void SetColourVariance(const glm::vec3& v);            // per-channel random ± at spawn
     void SetBlendMode(BlendMode m);
     void SetAttractor(const glm::vec3& worldPos, float strength);
     void SetUseAttractor(bool b);
     void SetUseCollision(bool b);
     void SetRestitution(float r);
+    void SetCollisionThickness(float t);                   // depth-gate distance
+    void SetCollisionSeparation(float s);                  // push-out along surface normal
     void SetActive(bool b);
     void SetTexture(uint32_t layer);                       // array layer; or kNoTexture
     void SetFrameCount(uint32_t count);                    // contiguous layers; 1 = static
@@ -88,10 +91,13 @@ private:
     bool      m_useAttractor = false;
 
     glm::vec4 m_colour = glm::vec4(1.f);
+    glm::vec3 m_colourVariance = glm::vec3(0.f);
     BlendMode m_blendMode = BlendMode::AlphaBlend;
 
     bool  m_useCollision = false;
     float m_restitution = 0.3f;
+    float m_collisionThickness = 0.75f;
+    float m_collisionSeparation = 0.02f;
 
     bool     m_active = true;
     uint32_t m_index = 0;

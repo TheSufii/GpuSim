@@ -54,11 +54,14 @@ struct EmitterDesc
     float noiseScale       = 1.f;
     float noiseScrollSpeed = 0.f;
 
-    glm::vec4 colour    = glm::vec4(1.f);   // overall multiplier on the colour-over-life gradient
-    BlendMode blendMode = BlendMode::AlphaBlend;
+    glm::vec4 colour        = glm::vec4(1.f);     // overall multiplier on the colour-over-life gradient
+    glm::vec3 colourVariance = glm::vec3(0.f);    // per-channel random ± applied per particle at spawn (0 = uniform)
+    BlendMode blendMode     = BlendMode::AlphaBlend;
 
-    bool  useCollision  = false;
-    float restitution   = 0.3f;
+    bool  useCollision        = false;
+    float restitution         = 0.3f;
+    float collisionThickness  = 0.75f;  // depth-space gate: ignore if particle is further than this from the surface
+    float collisionSeparation = 0.02f;  // push-out along normal to prevent sticking
 
     bool      useAttractor      = false;
     float     attractorStrength = 0.f;

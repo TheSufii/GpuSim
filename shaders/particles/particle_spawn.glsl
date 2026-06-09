@@ -46,7 +46,20 @@ void main()
     if (em.shapeDirection > 0.0 && dot(offset, offset) > 1e-8)
         dir = normalize(mix(dir, normalize(offset), em.shapeDirection));
 
-    particles[idx].position     = vec4(em.position.xyz + offset, 0.0);
+    // per-particle colour tint: random ± per channel, packed into position.w.
+    // 0.0 is the neutral sentinel; with variance we set a=1 so the packed bits
+    // are never exactly zero. Multiplier range [0,2] is stored as tint*0.5.
+    float packedTint = 0.0;
+    vec3  variance   = em.colourVariance.rgb;
+    if (any(greaterThan(variance, vec3(0.0))))
+    {
+        vec3 tint = vec3(randRange(seed + 30u, 1.0 - variance.r, 1.0 + variance.r),
+                         randRange(seed + 31u, 1.0 - variance.g, 1.0 + variance.g),
+                         randRange(seed + 32u, 1.0 - variance.b, 1.0 + variance.b));
+        packedTint = uintBitsToFloat(packUnorm4x8(vec4(clamp(tint, 0.0, 2.0) * 0.5, 1.0)));
+    }
+
+    particles[idx].position     = vec4(em.position.xyz + offset, packedTint);
     particles[idx].velocity     = vec4(dir * speed, 0.0);
     particles[idx].lifetime     = life;
     particles[idx].maxLifetime  = life;

@@ -330,6 +330,11 @@ GLuint ParticleWorld::CreateTextureArray(const std::vector<const uint8_t*>& laye
 
     const uint32_t layers = static_cast<uint32_t>(layerPixels.size());
 
+    // free a previously-owned array first (rebuilds while authoring would otherwise
+    // leak the old GL texture). never deletes an externally-set array we don't own.
+    if (m_ownsTextureArray && m_textureArray)
+        glDeleteTextures(1, &m_textureArray);
+
     glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_textureArray);
     m_ownsTextureArray = true;
 

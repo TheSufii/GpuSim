@@ -16,6 +16,7 @@ uniform float u_softFadeDist;
 in vec2  v_uv;
 in float v_lifeRatio;
 in float v_age;
+in vec3  v_tint;
 flat in uint v_emitter;
 
 out vec4 fragColour;
@@ -53,6 +54,7 @@ void main()
     float vrow = (float(v_emitter) + 0.5) / float(MAX_EMITTERS);
     vec4  grad = texture(u_lutColour, vec2(v_lifeRatio, vrow));
     vec4  col  = src * grad * em.colour;
+    col.rgb   *= v_tint;                         // per-particle colour variance
 
     if (u_softEnabled == 1u)
     {

@@ -10,6 +10,7 @@ layout(binding = 3) uniform sampler2D u_lutScalar;   // size-over-life LUT (LutS
 out vec2  v_uv;
 out float v_lifeRatio;   // 0 = just born, 1 = dying
 out float v_age;         // seconds alive (for looping animation)
+out vec3  v_tint;        // per-particle colour multiplier (1 = neutral)
 flat out uint v_emitter;
 
 const vec2 CORNER[6] = vec2[](
@@ -63,6 +64,9 @@ void main()
     v_uv        = UV[corner];
     v_lifeRatio = lifeRatio;
     v_age       = p.maxLifetime - p.lifetime;
+    // packed tint stored at spawn; 0 = neutral. unpacked range [0,2] (stored *0.5).
+    v_tint      = (p.position.w == 0.0) ? vec3(1.0)
+                                        : unpackUnorm4x8(floatBitsToUint(p.position.w)).rgb * 2.0;
     v_emitter   = p.emitterIndex;
 
 //    uint sorted = uint(gl_VertexID) / 6u;

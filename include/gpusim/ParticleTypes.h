@@ -4,7 +4,7 @@
 #include <cstdint>
 
 struct Particle {
-	glm::vec4 position;           // xyz = world pos,      w = unused
+	glm::vec4 position;           // xyz = world pos,      w = packed per-particle tint (packUnorm4x8; 0 = neutral)
 	glm::vec4 velocity;           // xyz = world vel,      w = unused
 	float lifetime;
 	float maxLifetime;
@@ -90,6 +90,9 @@ struct GpuEmitterData
 
     // emission shape: x = EmissionShape, yzw = size (radius / half-extents)
     glm::vec4 emissionShape;
+
+    glm::vec4 colourVariance;     // rgb = per-channel random ± amount at spawn (0 = none); w reserved
+    glm::vec4 collisionParams;    // x = thickness gate, y = surface separation; zw reserved
 };
 
 struct DrawArraysIndirectCommand
@@ -126,7 +129,7 @@ struct CameraParams
 // static asserts � catch CPU/GPU struct mismatches at compile time
 // if these fire, the struct layout no longer matches std430
 static_assert(sizeof(Particle) == 48, "Particle layout mismatch");
-static_assert(sizeof(GpuEmitterData) == 192, "GpuEmitterData layout mismatch");
+static_assert(sizeof(GpuEmitterData) == 224, "GpuEmitterData layout mismatch");
 static_assert(sizeof(DrawArraysIndirectCommand) == 16, "DrawCommand layout mismatch");
 static_assert(sizeof(SortEntry) == 8, "SortEntry layout mismatch");
 static_assert(sizeof(WorldParams) == 16, "WorldParams layout mismatch");
