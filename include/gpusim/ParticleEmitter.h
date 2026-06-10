@@ -128,4 +128,7 @@ private:
     uint32_t     m_colourStopCount = 2;
     CurveKey     m_sizeOverLife[MAX_CURVE_KEYS];
     uint32_t     m_sizeKeyCount = 2;
+
+    // set when curve data changes; cleared by ParticleWorld::BakeLifetimeLUTs
+    bool m_lutDirty = true;
 };

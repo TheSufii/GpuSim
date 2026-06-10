@@ -56,19 +56,19 @@ void main()
     vec4  col  = src * grad * em.colour;
     col.rgb   *= v_tint;                         // per-particle colour variance
 
+   
+    if (col.a < 0.002) discard;
+
     if (u_softEnabled == 1u)
     {
         vec2 suv = gl_FragCoord.xy / vec2(textureSize(u_depthBuffer, 0));
         float scene = linearize(texture(u_depthBuffer, suv).r);
         float frag  = linearize(gl_FragCoord.z);
         col.a *= clamp((scene - frag) / max(u_softFadeDist, 1e-4), 0.0, 1.0);
+        if (col.a < 0.002) discard;
     }
 
-    if (col.a < 0.002) discard;
-
-    // premultiplied alpha. blend func is GL_ONE, GL_ONE_MINUS_SRC_ALPHA.
-    //   alpha: (rgb*a, a)  -> standard over
-    //   additive: (rgb*a, 0) -> pure add, occludes nothing, order-independent
+   
     vec3 premul = col.rgb * col.a;
     float outA = (em.blendMode == BLEND_ADDITIVE) ? 0.0 : col.a;
     fragColour = vec4(premul, outA);

@@ -7,6 +7,8 @@
 #define BIND_EMITTERS       5
 #define BIND_SORTKEYS_ALT   6
 #define BIND_HISTOGRAM      7
+#define BIND_SORTCOUNT      8
+#define BIND_SORTDISPATCH   9
 
 #define BIND_CAMERA_UBO     0
 #define BIND_WORLD_UBO      1
@@ -102,7 +104,7 @@ layout(std140, binding = BIND_WORLD_UBO) uniform WorldUBO
     uint  u_emitterCount;
 };
 
-// ---- hashing / RNG ----
+
 uint hashU(uint x)
 {
     x ^= x >> 16; x *= 0x7feb352du;
@@ -180,9 +182,7 @@ float vnoise(vec3 p)
     return mix(mix(x00,x10,f.y), mix(x01,x11,f.y), f.z) * 2.0 - 1.0;
 }
 
-// Divergence-free curl noise: velocity = curl of a vector potential built from
-// three decorrelated value-noise fields. No sources/sinks, so particles swirl
-// instead of clumping. 12 vnoise taps (central differences of the potential).
+
 vec3 curlNoise(vec3 p)
 {
     const float e = 0.1;                       // finite-difference step (noise space)
@@ -190,7 +190,7 @@ vec3 curlNoise(vec3 p)
     const vec3  oZ = vec3(0.0, 17.2, 0.0);     // offset -> potential.z field
     vec3 dx = vec3(e,0,0), dy = vec3(0,e,0), dz = vec3(0,0,e);
 
-    // curl = ( dPz/dy - dPy/dz, dPx/dz - dPz/dx, dPy/dx - dPx/dy )
+    
     float x = (vnoise(p+dy+oZ) - vnoise(p-dy+oZ)) - (vnoise(p+dz+oY) - vnoise(p-dz+oY));
     float y = (vnoise(p+dz)    - vnoise(p-dz))    - (vnoise(p+dx+oZ) - vnoise(p-dx+oZ));
     float z = (vnoise(p+dx+oY) - vnoise(p-dx+oY)) - (vnoise(p+dy)    - vnoise(p-dy));

@@ -1,15 +1,3 @@
-# ============================================================================
-#  GpuSim — standalone GPU particle library + testbed (GpuSimLab)
-#
-#  Builds two ways:
-#   • Standalone (this repo is the top-level CMake project): builds the GpuSim
-#     library AND the GpuSimLab testbed, vendoring SDL3 + ImGui + stb.
-#   • As a subproject (a host engine does add_subdirectory() on this repo):
-#     builds ONLY the GpuSim library. It reuses the host's glad/glm/nlohmann
-#     targets when they already exist — critically glad, so the GL function-
-#     pointer table stays a single shared instance. The testbed and its
-#     window/UI deps (SDL3, ImGui, stb) are skipped.
-# ============================================================================
 cmake_minimum_required(VERSION 3.21)
 
 if(POLICY CMP0141)
@@ -26,11 +14,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
-# ----------------------------------------------------------------------------
-#  Library dependencies — shared with the host when consumed as a subproject.
-#  The if(NOT TARGET ...) guards avoid duplicate-target errors and (for glad)
-#  keep the GL loader a single instance across the host + library.
-# ----------------------------------------------------------------------------
+
 if(NOT TARGET glad)
     add_library(glad STATIC "${TP}/glad/src/glad.c")
     target_include_directories(glad PUBLIC "${TP}/glad/include")
@@ -45,9 +29,7 @@ if(NOT TARGET nlohmann_json)
     target_include_directories(nlohmann_json INTERFACE "${TP}/nlohmann")
 endif()
 
-# ----------------------------------------------------------------------------
-#  GpuSim — the library (always built)
-# ----------------------------------------------------------------------------
+
 add_library(GpuSim STATIC
     src/GpuSimulation.cpp
     src/ParticleEmitter.cpp
@@ -65,10 +47,11 @@ if(MSVC)
     target_compile_options(GpuSim PRIVATE /utf-8)
 endif()
 
-# ----------------------------------------------------------------------------
-#  Standalone-only: the testbed + the window/UI deps only it needs.
-#  Skipped entirely when a host engine consumes this via add_subdirectory().
-# ----------------------------------------------------------------------------
+
+target_compile_definitions(GpuSim INTERFACE
+    GPUSIM_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders/particles/")
+
+
 if(PROJECT_IS_TOP_LEVEL)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
     find_package(OpenGL REQUIRED)

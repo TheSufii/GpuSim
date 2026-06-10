@@ -1,19 +1,10 @@
 #pragma once
-//
-//  gpusim/EmitterWidgets.h — Dear ImGui editors for the "custom" EmitterDesc
-//  fields that a plain reflection/field loop can't render: the colour-over-life
-//  gradient and the size-over-life curve, each with per-segment ease modes.
-//
-//  These edit the desc's stop/key arrays in place and return true when anything
-//  changed, so the host can re-Configure() the emitter (the world then re-bakes
-//  the lifetime LUT and the change shows next frame).
-//
+
 //  OPTIONAL header: it depends on Dear ImGui in addition to the core library.
 //  The GpuSim library itself never includes it — only a host that already has
 //  ImGui does (the lab here, or an engine inspector). This is the single source
-//  for these widgets; DawnEngine's inspector adopts it in place of its inline
-//  copies (Editor.cpp) when it migrates to consume the library.
-//
+//  for these widgets
+
 #include <gpusim/EmitterDesc.h>   // GradientStop, CurveKey, EaseMode, EvalGradient/Curve, MAX_*
 #include <imgui.h>
 #include <cstdint>

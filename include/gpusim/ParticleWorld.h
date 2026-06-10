@@ -63,8 +63,9 @@ public:
     uint32_t GetActiveEmitterCount() const;        // emitters with active == true
     uint32_t GetLastSpawnCount()     const { return m_lastSpawnCount; }  // spawned last Dispatch
 
-    // alive = capacity - deadCount. One uint GPU->CPU read; it stalls, so call
-    // this throttled (the editor refreshes a few times a second, not per frame).
+    // alive = capacity - deadCount. Non-blocking: returns the most recent
+    // completed async copy (a frame or two old) and kicks off the next one,
+    // so it never stalls the pipeline. Safe to call every frame.
     uint32_t ReadbackAliveCount() const;
 
 private:
@@ -86,15 +87,24 @@ private:
     GLuint m_sortBuffer = 0;
     GLuint m_sortBufferAlt = 0;
     GLuint m_histogramBuffer = 0;
+    GLuint m_sortCountBuffer = 0;     // alive entries compacted by keygen (zeroed each frame)
+    GLuint m_sortDispatchBuffer = 0;  // dispatch-indirect args for the radix passes
     GLuint m_emitterBuffer = 0;
     GLuint m_worldUBO = 0;
     GLuint m_cameraUBO = 0;
+
+    // async alive-count readback
+    mutable GLuint          m_aliveReadback = 0;
+    mutable const uint32_t* m_aliveMapped = nullptr;
+    mutable GLsync          m_aliveFence = 0;
+    mutable uint32_t        m_cachedDeadCount = 0xFFFFFFFFu;   // > max until first result -> alive 0
 
     // internal shaders
     GLuint m_keygenShader = 0;
     GLuint m_radixCountShader = 0;
     GLuint m_radixPrefixShader = 0;
     GLuint m_radixScatterShader = 0;
+    GLuint m_indirectShader = 0;
     GLuint m_collisionShader = 0;
 
     // collision / soft state

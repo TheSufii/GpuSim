@@ -1,9 +1,7 @@
 #pragma once
-#include "ParticleTypes.h"
 #include "SimBindings.h"
 #include <glad/glad.h>
 #include <cassert>
-#include <cstdint>
 
 struct RenderContext
 {
@@ -26,9 +24,9 @@ struct RenderContext
     GLuint lutScalar = 0;        // lifetime scalar/size LUT atlas (sampler2D, optional)
 };
 
-// --------------------------------------------------------
+
 // RenderStage — base for all particle render passes.
-// --------------------------------------------------------
+
 class RenderStage
 {
 public:
@@ -36,15 +34,13 @@ public:
     virtual void Render(const RenderContext& ctx) = 0;
 };
 
-// --------------------------------------------------------
-// ParticleBillboardRenderStage
 // Single pass, premultiplied alpha. Additive and alpha-blended particles
 // composite correctly in one depth-sorted draw because the blend func is
 // unified: glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA). The fragment shader
 // decides per-particle output alpha from its emitter's blendMode.
 // Camera matrices come from the CameraUBO the library binds — not from here.
 // Self-contained GL state so it never depends on whatever the host left bound.
-// --------------------------------------------------------
+
 class ParticleBillboardRenderStage : public RenderStage
 {
 public:

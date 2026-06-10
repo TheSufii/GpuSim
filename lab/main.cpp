@@ -10,7 +10,7 @@
 #include <gpusim/EmitterDescJson.h>
 #include <gpusim/ShaderPreprocessor.h>
 #include <gpusim/EmitterWidgets.h>
-#include <gpusim/Flipbook.h>   // shared _NxM flipbook convention
+#include <gpusim/Flipbook.h>   
 
 #include <glm/glm.hpp>
 #include "OrbitCamera.h"
@@ -83,7 +83,7 @@ GLuint CompileBillboard(const fs::path& shaderDir)
 
 // One texture in the lab's registry; each becomes one layer of the world's
 // texture array, so different emitters can sample different textures.
-struct LoadedTexture { std::string name; std::vector<unsigned char> px; };  // res*res RGBA8
+struct LoadedTexture { std::string name; std::vector<unsigned char> px; };  
 
 // Load + resize an image into `out` (flip + linear resize mirror the cooker).
 bool LoadPixels(const char* path, uint32_t res, std::vector<unsigned char>& out)
@@ -100,13 +100,10 @@ bool LoadPixels(const char* path, uint32_t res, std::vector<unsigned char>& out)
 }
 
 // Slice a "_NxM" spritesheet into cols*rows frames, appending each as a separate
-// res×res layer to `out` in reading order (frame 0 = top-left). Mirrors the
-// engine's TextureCooker::CookFlipbook. Returns frames added, or 0 on failure.
 static int LoadFlipbookFrames(const char* path, uint32_t res, int cols, int rows,
                               std::vector<LoadedTexture>& out)
 {
-    // Flip on load like LoadPixels, so each extracted block matches the GL
-    // bottom-row-first orientation the single-texture path produces.
+
     int w = 0, h = 0, ch = 0;
     stbi_set_flip_vertically_on_load(true);
     unsigned char* data = stbi_load(path, &w, &h, &ch, 4);
@@ -121,8 +118,7 @@ static int LoadFlipbookFrames(const char* path, uint32_t res, int cols, int rows
     std::vector<unsigned char> resized((size_t)res * res * 4);
     int added = 0;
 
-    // Emit in reading order. Flip-on-load puts the sheet's top grid row in the
-    // LAST memory block, so animation row gr reads memory block (rows-1-gr).
+ 
     for (int gr = 0; gr < rows; ++gr) {
         int br = rows - 1 - gr;
         for (int gc = 0; gc < cols; ++gc) {
@@ -143,9 +139,7 @@ static int LoadFlipbookFrames(const char* path, uint32_t res, int cols, int rows
     return added;
 }
 
-// (Re)build the world's texture array from the registry: layer i = textures[i].
-// CreateTextureArray frees the previously-owned array, so repeated rebuilds while
-// authoring don't leak.
+
 void RebuildTextureArray(ParticleWorld& world, const std::vector<LoadedTexture>& texs, uint32_t res = 256)
 {
     if (texs.empty()) return;   // nothing bound → emitters fall back to procedural
@@ -155,10 +149,7 @@ void RebuildTextureArray(ParticleWorld& world, const std::vector<LoadedTexture>&
     world.CreateTextureArray(layers, res);
 }
 
-// --- ground plane + its depth target (point 4: a surface for soft particles +
-// collision). We render the ground's depth into this off-screen texture — that's
-// what the collision/soft passes sample — and the ground's colour to the screen
-// separately, so particles never read a depth texture they're writing into. ---
+
 struct DepthTarget {
     GLuint fbo = 0, tex = 0;
     int    w = 0, h = 0;
@@ -225,8 +216,7 @@ std::vector<std::string> ScanAssets(const char* ext)
     return out;
 }
 
-// The editable property panel for one emitter. Scalar/enum/colour fields apply
-// through Configure(); placement applies directly.
+
 void DrawEmitterProperties(EmitterEntry& en, const std::vector<LoadedTexture>& textures)
 {
     EmitterDesc& d = en.desc;
@@ -323,11 +313,11 @@ void DrawEmitterProperties(EmitterEntry& en, const std::vector<LoadedTexture>& t
     if (ch) en.ptr->Configure(d);
 }
 
-} // namespace
+} 
 
 int main(int, char**)
 {
-    // ---- SDL + GL 4.5 core context -----------------------------------------
+   
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::fprintf(stderr, "[lab] SDL_Init failed: %s\n", SDL_GetError());
         return 1;
@@ -349,9 +339,9 @@ int main(int, char**)
         std::fprintf(stderr, "[lab] gladLoadGLLoader failed\n");
         return 1;
     }
-    SDL_GL_SetSwapInterval(1);   // vsync
+    SDL_GL_SetSwapInterval(1);  
 
-    // ---- ImGui (docking) ----------------------------------------------------
+   
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -359,7 +349,7 @@ int main(int, char**)
     ImGui_ImplSDL3_InitForOpenGL(window, gl);
     ImGui_ImplOpenGL3_Init("#version 450");
 
-    // ---- Particle world -----------------------------------------------------
+
     GLuint billboard = CompileBillboard(GPUSIM_LAB_SHADER_DIR);
     if (billboard == 0) {
         std::fprintf(stderr, "[lab] fatal: billboard shader failed to build — see errors above\n");
@@ -371,7 +361,7 @@ int main(int, char**)
     world.SetupDefault(billboard);
     world.SetNearFar(0.1f, 1000.f);
 
-    // ---- lab state ----------------------------------------------------------
+   
     std::vector<EmitterEntry> emitters;
     int         selected = -1;
     int         nextId   = 0;
@@ -382,9 +372,9 @@ int main(int, char**)
         texFiles     = ScanAssets(".png");
         emitterFiles = ScanAssets(".emitter");
     };
-    // Find a texture in the registry by name, or load assets/<name>.png into it.
-    // For flipbook spritesheets (_NxM suffix) all frames are loaded as contiguous layers.
-    // Returns the base layer index, or -1 on failure.
+
+   
+
     auto loadTexture = [&](const std::string& fname) -> int {
         std::string name = fs::path(fname).stem().string();
 
@@ -451,8 +441,7 @@ int main(int, char**)
         std::string tex;                                      // portable name of the emitter's texture
         if (en.desc.textureLayer != kNoTexture && en.desc.textureLayer < textures.size()) {
             tex = textures[en.desc.textureLayer].name;
-            // a flipbook emitter points at frame 0 ("<sheet>_f000"); write the sheet
-            // name back so reload re-slices and re-derives frameCount from "_NxM".
+           
             if (en.desc.frameCount > 1) tex = gpusim::FlipbookStemFromFrame(tex);
         }
         std::ofstream out(fs::path(GPUSIM_LAB_ASSET_DIR) / fname);
@@ -462,10 +451,10 @@ int main(int, char**)
     };
 
     refreshFiles();
-    int smokeLayer = loadTexture("smoke");                 // → registry layer 0
-    addEmitter();                                          // emitter 0
+    int smokeLayer = loadTexture("smoke");                 
+    addEmitter();                                         
     emitters[0].desc.colour       = glm::vec4(0.45f, 0.72f, 1.f, 1.f);
-    emitters[0].desc.useCollision = true;                  // bounces off the ground plane
+    emitters[0].desc.useCollision = true;                  
     if (smokeLayer >= 0) emitters[0].desc.textureLayer = (uint32_t)smokeLayer;
     emitters[0].ptr->Configure(emitters[0].desc);
 
@@ -621,7 +610,7 @@ int main(int, char**)
  
         world.SetCollisionEnabled(groundOn);
 
-        // 1) ground depth → the off-screen texture the particle passes sample
+       
         if (groundOn) {
             depth.ensure(w, h);
             glBindFramebuffer(GL_FRAMEBUFFER, depth.fbo);
@@ -638,7 +627,7 @@ int main(int, char**)
             world.SetDepthTexture(0);
         }
 
-        // 2) visible frame: ground to the screen, then particles on top
+      
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, w, h);
         glClearColor(0.06f, 0.07f, 0.09f, 1.f);
@@ -663,7 +652,7 @@ int main(int, char**)
         SDL_GL_SwapWindow(window);
     }
 
-    // ---- Teardown -----------------------------------------------------------
+    
     glDeleteProgram(groundProg);
     glDeleteVertexArrays(1, &emptyVAO);
     depth.destroy();

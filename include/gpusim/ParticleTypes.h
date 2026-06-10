@@ -82,7 +82,6 @@ struct GpuEmitterData
     uint32_t  textureIndex;       // texture array layer; kNoTexture = procedural circle
     uint32_t  animMode;           // AnimMode cast to uint
 
-    // mixed row (all 4-byte, 4-byte aligned � valid std430/std140)
     uint32_t  frameCount;         // contiguous full-res layers from textureIndex; 1 = static
     float     velocityStretch;    // 0 = camera-facing; >0 = stretch billboard along velocity
     float     animFps;            // frames/sec for AnimMode::Loop (ignored by PlayOnce)
@@ -126,7 +125,7 @@ struct CameraParams
 };
 
 
-// static asserts � catch CPU/GPU struct mismatches at compile time
+
 // if these fire, the struct layout no longer matches std430
 static_assert(sizeof(Particle) == 48, "Particle layout mismatch");
 static_assert(sizeof(GpuEmitterData) == 224, "GpuEmitterData layout mismatch");

@@ -3,14 +3,15 @@
 layout(local_size_x = 256) in;
 
 layout(std430, binding = BIND_HISTOGRAM) buffer HistBuf { uint histogram[]; };
-
+layout(std430, binding = BIND_SORTCOUNT) readonly buffer SortCountBuf { uint sortCount; };
 
 shared uint s_scan[256];
+
 
 void main()
 {
     uint b = gl_LocalInvocationID.x;       // bucket
-    uint groups = u_maxParticles / 256u;
+    uint groups = (sortCount + 255u) / 256u;
 
     uint total = 0u;                        // this bucket's total across all groups
     for (uint g = 0u; g < groups; ++g) total += histogram[b * groups + g];

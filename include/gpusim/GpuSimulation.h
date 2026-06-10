@@ -3,6 +3,7 @@
 #include "SimStage.h"
 #include "RenderStage.h"
 #include "ParticleTypes.h"
+#include "GpuProfiler.h"
 #include <glad/glad.h>
 #include <vector>
 #include <memory>
@@ -35,6 +36,10 @@ public:
     uint32_t GetMaxElements()    const { return m_maxElements; }
     bool     IsInitialized()     const { return m_initialized; }
 
+    // per-stage GPU times (non-blocking; values are a few frames old)
+    GpuProfiler&       Profiler()       { return m_profiler; }
+    const GpuProfiler& Profiler() const { return m_profiler; }
+
 protected:
     void BindBuffers();
     void RunStages(const SimContext& ctx);
@@ -57,6 +62,8 @@ protected:
     std::vector<std::unique_ptr<SimStage>>    m_stages;
     std::vector<std::unique_ptr<RenderStage>> m_renderStages;
     std::vector<AuxBuffer>                    m_auxBuffers;
+
+    GpuProfiler m_profiler;
 
     bool m_initialized = false;
 };

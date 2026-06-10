@@ -1,4 +1,5 @@
 #include "ParticleEmitter.h"
+#include <cstring>
 
 void ParticleEmitter::SetLocalOffset(const glm::vec3& v) { m_localOffset = v; }
 void ParticleEmitter::SetLocalDirection(const glm::vec3& v) { m_localDirection = v; }
@@ -139,12 +140,19 @@ void ParticleEmitter::Configure(const EmitterDesc& desc)
     m_emissionMode  = desc.emissionMode;
     m_burstAmount   = desc.burstCount;
     m_burstInterval = desc.burstInterval;
-    m_startDelay    = desc.startDelay;    // note: m_age is runtime, not copied here
+    m_startDelay    = desc.startDelay;    
     m_duration      = desc.duration;
 
     m_emissionShape     = desc.emissionShape;
     m_emissionShapeSize = desc.emissionShapeSize;
     m_shapeDirection    = desc.shapeDirection;
+
+
+    if (m_colourStopCount != desc.colourStopCount ||
+        m_sizeKeyCount    != desc.sizeKeyCount ||
+        std::memcmp(m_colourOverLife, desc.colourOverLife, sizeof(m_colourOverLife)) != 0 ||
+        std::memcmp(m_sizeOverLife,   desc.sizeOverLife,   sizeof(m_sizeOverLife))   != 0)
+        m_lutDirty = true;
 
     m_colourStopCount = desc.colourStopCount;
     for (int i = 0; i < MAX_GRADIENT_STOPS; ++i) m_colourOverLife[i] = desc.colourOverLife[i];

@@ -4,6 +4,7 @@
 #include <glad/glad.h>
 #include <functional>
 #include <memory>
+#include <string>
 #include <cassert>
 #include <cstdint>
 
@@ -17,7 +18,13 @@ public:
     // barrier issued after Execute — override for non-default needs
     virtual GLbitfield GetBarrierBits() const { return GL_SHADER_STORAGE_BARRIER_BIT; }
 
+    // label shown by the GPU profiler / editor
+    void SetDebugName(std::string name)      { m_debugName = std::move(name); }
+    const std::string& GetDebugName() const  { return m_debugName; }
+
 protected:
+    std::string m_debugName = "Stage";
+
     static constexpr uint32_t k_groupSize = 256;
 
     static uint32_t GroupsFor(uint32_t threads)
@@ -26,9 +33,9 @@ protected:
     }
 };
 
-// --------------------------------------------------------
+
 // ComputeStage — one thread per element. update, lifetime, keygen, custom.
-// --------------------------------------------------------
+
 class ComputeStage : public SimStage
 {
 public:
@@ -47,16 +54,17 @@ protected:
     GLuint m_shader;
 };
 
-// --------------------------------------------------------
+
 // SpawnStage — one thread per SPAWN (not per emitter).
 // Dispatches ctx.spawnCount threads; each creates one particle.
-// --------------------------------------------------------
+
 class SpawnStage : public SimStage
 {
 public:
     explicit SpawnStage(GLuint shader) : m_shader(shader)
     {
         assert(shader != 0 && "SpawnStage: invalid shader");
+        m_uSpawnCount = glGetUniformLocation(shader, "u_spawnCount");
     }
 
     void Execute(const SimContext& ctx) override
@@ -64,20 +72,19 @@ public:
         if (ctx.spawnCount == 0) return;            // nothing to spawn this frame
         glUseProgram(m_shader);
 
-
-        GLint l = glGetUniformLocation(m_shader, "u_spawnCount");
-        if (l != -1) glUniform1ui(l, ctx.spawnCount);
+        if (m_uSpawnCount != -1) glUniform1ui(m_uSpawnCount, ctx.spawnCount);
 
         glDispatchCompute(GroupsFor(ctx.spawnCount), 1, 1);
     }
 
 private:
     GLuint m_shader;
+    GLint  m_uSpawnCount = -1;
 };
 
-// --------------------------------------------------------
+
 // SingleThreadStage — one thread. indirect write.
-// --------------------------------------------------------
+
 class SingleThreadStage : public SimStage
 {
 public:
@@ -98,11 +105,11 @@ private:
     GLuint m_shader;
 };
 
-// --------------------------------------------------------
+
 // TextureStage — one thread per element, binds a texture first.
 // Used for depth-buffer collision. depthTextureRef is a pointer so it
 // always reflects the latest SetDepthTexture each frame.
-// --------------------------------------------------------
+
 class TextureStage : public ComputeStage
 {
 public:
@@ -122,10 +129,10 @@ private:
     const GLuint* m_depthTextureRef;
 };
 
-// --------------------------------------------------------
+
 // ConditionalStage — wraps a stage, runs only when condition() is true.
 // Evaluated every frame so runtime toggles take effect immediately.
-// --------------------------------------------------------
+
 class ConditionalStage : public SimStage
 {
 public:

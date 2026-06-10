@@ -14,9 +14,11 @@ namespace SimBindings
     constexpr uint32_t Emitters = 5;
     constexpr uint32_t SortKeysAlt = 6;
     constexpr uint32_t SortHistogram = 7;
+    constexpr uint32_t SortCount = 8;       // alive entries compacted by keygen this frame
+    constexpr uint32_t SortDispatch = 9;    // dispatch-indirect args for the radix passes
 
     // custom aux buffers in user stages must start here
-    constexpr uint32_t UserBindingStart = 8;
+    constexpr uint32_t UserBindingStart = 10;
 
     // UBO binding points
 

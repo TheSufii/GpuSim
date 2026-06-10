@@ -46,9 +46,7 @@ void main()
     if (em.shapeDirection > 0.0 && dot(offset, offset) > 1e-8)
         dir = normalize(mix(dir, normalize(offset), em.shapeDirection));
 
-    // per-particle colour tint: random ± per channel, packed into position.w.
-    // 0.0 is the neutral sentinel; with variance we set a=1 so the packed bits
-    // are never exactly zero. Multiplier range [0,2] is stored as tint*0.5.
+ 
     float packedTint = 0.0;
     vec3  variance   = em.colourVariance.rgb;
     if (any(greaterThan(variance, vec3(0.0))))

@@ -1,10 +1,5 @@
 #pragma once
-//
-//  OrbitCamera — a tiny orbit/zoom camera for the lab. The library is camera-
-//  agnostic (it just takes view/proj matrices via SetCamera), so the host owns
-//  whatever camera it likes. This is the equivalent of the engine building a
-//  CameraData from its CameraComponent — here we build it from mouse input.
-//
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>

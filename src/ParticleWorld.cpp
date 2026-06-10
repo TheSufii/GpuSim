@@ -3,32 +3,39 @@
 #include "SimBindings.h"
 #include <cassert>
 #include <vector>
-#include "log.h"   // gpusim-local logging (was engine's logging/log.h → spdlog)
+  
 
-// --------------------------------------------------------
+
 // internal radix SortStage — always runs. owns the three radix programs.
-// --------------------------------------------------------
+// Group counts come from a GPU-written dispatch-indirect buffer, so the sort
+// scales with the alive count instead of buffer capacity.
+
 class SortStage : public SimStage
 {
 public:
-    SortStage(GLuint count, GLuint prefix, GLuint scatter, uint32_t maxElements)
-        : m_count(count), m_prefix(prefix), m_scatter(scatter), m_max(maxElements)
+    SortStage(GLuint count, GLuint prefix, GLuint scatter, GLuint dispatchBuffer)
+        : m_count(count), m_prefix(prefix), m_scatter(scatter), m_dispatchBuffer(dispatchBuffer)
     {
         assert(count && prefix && scatter && "SortStage: invalid shaders");
+        assert(dispatchBuffer != 0 && "SortStage: invalid dispatch buffer");
+        m_countShift   = glGetUniformLocation(count,   "u_bitShift");
+        m_countPing    = glGetUniformLocation(count,   "u_pingPong");
+        m_scatterShift = glGetUniformLocation(scatter, "u_bitShift");
+        m_scatterPing  = glGetUniformLocation(scatter, "u_pingPong");
     }
 
     void Execute(const SimContext& ctx)
     {
-        const uint32_t groups = m_max / 256;
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, m_dispatchBuffer);
         for (uint32_t pass = 0; pass < 4; ++pass)
         {
             uint32_t shift = pass * 8;
             uint32_t pingPong = pass & 1;
 
             glUseProgram(m_count);
-            glUniform1ui(glGetUniformLocation(m_count, "u_bitShift"), shift);
-            glUniform1ui(glGetUniformLocation(m_count, "u_pingPong"), pingPong);  // <-- added
-            glDispatchCompute(groups, 1, 1);
+            glUniform1ui(m_countShift, shift);
+            glUniform1ui(m_countPing, pingPong);
+            glDispatchComputeIndirect(0);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
             glUseProgram(m_prefix);
@@ -36,11 +43,12 @@ public:
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
             glUseProgram(m_scatter);
-            glUniform1ui(glGetUniformLocation(m_scatter, "u_bitShift"), shift);
-            glUniform1ui(glGetUniformLocation(m_scatter, "u_pingPong"), pingPong);
-            glDispatchCompute(groups, 1, 1);
+            glUniform1ui(m_scatterShift, shift);
+            glUniform1ui(m_scatterPing, pingPong);
+            glDispatchComputeIndirect(0);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
     }
 
     // last stage before the draw: vertex shader reads SSBOs, indirect is a draw
@@ -52,18 +60,27 @@ public:
 
 private:
     GLuint m_count, m_prefix, m_scatter;
-    uint32_t m_max;
+    GLuint m_dispatchBuffer;
+    GLint  m_countShift = -1, m_countPing = -1, m_scatterShift = -1, m_scatterPing = -1;
 };
 
-// --------------------------------------------------------
+
 ParticleWorld::~ParticleWorld()
 {
     if (m_registry) m_registry->Unregister(this);
 
     GLuint bufs[] = { m_deadListBuffer, m_deadCountBuffer, m_sortBuffer,
-                      m_sortBufferAlt, m_histogramBuffer, m_emitterBuffer,
+                      m_sortBufferAlt, m_histogramBuffer, m_sortCountBuffer,
+                      m_sortDispatchBuffer, m_emitterBuffer,
                       m_worldUBO, m_cameraUBO };
     for (GLuint b : bufs) if (b) glDeleteBuffers(1, &b);
+
+    if (m_aliveFence) glDeleteSync(m_aliveFence);
+    if (m_aliveReadback)
+    {
+        glUnmapNamedBuffer(m_aliveReadback);
+        glDeleteBuffers(1, &m_aliveReadback);
+    }
 
     if (m_ownsTextureArray && m_textureArray)
         glDeleteTextures(1, &m_textureArray);
@@ -91,6 +108,8 @@ void ParticleWorld::Initialize(uint32_t maxParticles, const char* shaderDir)
     AddAuxBuffer(m_sortBuffer, SimBindings::SortKeys);
     AddAuxBuffer(m_sortBufferAlt, SimBindings::SortKeysAlt);
     AddAuxBuffer(m_histogramBuffer, SimBindings::SortHistogram);
+    AddAuxBuffer(m_sortCountBuffer, SimBindings::SortCount);
+    AddAuxBuffer(m_sortDispatchBuffer, SimBindings::SortDispatch);
     AddAuxBuffer(m_emitterBuffer, SimBindings::Emitters);
 
     LoadInternalShaders();   // keygen + radix; collision loaded on demand
@@ -125,6 +144,16 @@ void ParticleWorld::InitializeSortBuffers()
     const uint32_t groups = m_maxElements / k_threadGroup;
     glCreateBuffers(1, &m_histogramBuffer);
     glNamedBufferStorage(m_histogramBuffer, k_radixBuckets * groups * sizeof(uint32_t), nullptr, 0);
+
+    // alive-entry counter, compacted into by keygen (zeroed each Dispatch)
+    const uint32_t zero = 0;
+    glCreateBuffers(1, &m_sortCountBuffer);
+    glNamedBufferStorage(m_sortCountBuffer, sizeof(uint32_t), &zero, 0);
+
+    // dispatch-indirect args {groups, 1, 1} for the radix passes, GPU-written
+    const uint32_t initialDispatch[3] = { 0, 1, 1 };
+    glCreateBuffers(1, &m_sortDispatchBuffer);
+    glNamedBufferStorage(m_sortDispatchBuffer, sizeof(initialDispatch), initialDispatch, 0);
 }
 
 void ParticleWorld::InitializeEmitterBuffer()
@@ -149,6 +178,7 @@ void ParticleWorld::LoadInternalShaders()
     m_radixCountShader = LoadComputeShader(m_shaderDir + "particle_sort_radix_count.glsl");
     m_radixPrefixShader = LoadComputeShader(m_shaderDir + "particle_sort_radix_prefix.glsl");
     m_radixScatterShader = LoadComputeShader(m_shaderDir + "particle_sort_radix_scatter.glsl");
+    m_indirectShader = LoadComputeShader(m_shaderDir + "particle_indirect.glsl");
     m_collisionShader = LoadComputeShader(m_shaderDir + "particle_collision.glsl");
 }
 
@@ -160,28 +190,37 @@ void ParticleWorld::SetupDefault(GLuint billboardShader)
     GLuint spawn = LoadComputeShader(m_shaderDir + "particle_spawn.glsl");
     GLuint update = LoadComputeShader(m_shaderDir + "particle_update.glsl");
     GLuint lifetime = LoadComputeShader(m_shaderDir + "particle_lifetime.glsl");
-    GLuint indirect = LoadComputeShader(m_shaderDir + "particle_indirect.glsl");
 
-    AddStage(std::make_unique<SpawnStage>(spawn));
-    AddStage(std::make_unique<ComputeStage>(update));
-    AddStage(std::make_unique<ComputeStage>(lifetime));
-    AddStage(std::make_unique<SingleThreadStage>(indirect));
+    auto AddNamed = [this](std::unique_ptr<SimStage> stage, const char* name)
+    { stage->SetDebugName(name); AddStage(std::move(stage)); };
+
+    AddNamed(std::make_unique<SpawnStage>(spawn), "Spawn");
+    AddNamed(std::make_unique<ComputeStage>(update), "Update");
+    AddNamed(std::make_unique<ComputeStage>(lifetime), "Lifetime");
 
     AddRenderStage(std::make_unique<ParticleBillboardRenderStage>(billboardShader));
-    // keygen + sort (+ collision) appended by Finalize on first Dispatch
+    // collision + keygen + indirect args + sort appended by Finalize on first Dispatch
 }
 
 void ParticleWorld::Finalize()
 {
-    AddStage(std::make_unique<ConditionalStage>(
+    auto AddNamed = [this](std::unique_ptr<SimStage> stage, const char* name)
+    { stage->SetDebugName(name); AddStage(std::move(stage)); };
+
+    // collision runs before keygen so killed particles never enter the sort
+    // (and the draw count, derived from the compacted entries, stays exact).
+    AddNamed(std::make_unique<ConditionalStage>(
         std::make_unique<TextureStage>(m_collisionShader, &m_depthTexture),
         [this]() { return m_collisionEnabled && m_depthTexture != 0; }
-    ));
+    ), "Collision");
 
-
-    // keygen writes current depths into the sort buffer, then radix sorts.
-    AddStage(std::make_unique<ComputeStage>(m_keygenShader));
-    AddStage(std::make_unique<SortStage>(m_radixCountShader, m_radixPrefixShader, m_radixScatterShader, m_maxElements));
+    // keygen compacts alive entries + their depths into the sort buffer;
+    // the indirect stage turns the compacted count into draw + dispatch args;
+    // the radix passes then sort only what is alive.
+    AddNamed(std::make_unique<ComputeStage>(m_keygenShader), "Sort keygen");
+    AddNamed(std::make_unique<SingleThreadStage>(m_indirectShader), "Indirect args");
+    AddNamed(std::make_unique<SortStage>(m_radixCountShader, m_radixPrefixShader,
+                                         m_radixScatterShader, m_sortDispatchBuffer), "Radix sort");
 
     m_finalized = true;
 }
@@ -256,9 +295,37 @@ uint32_t ParticleWorld::GetActiveEmitterCount() const
 uint32_t ParticleWorld::ReadbackAliveCount() const
 {
     if (!m_deadCountBuffer) return 0;
-    uint32_t dead = 0;
-    glGetNamedBufferSubData(m_deadCountBuffer, 0, sizeof(uint32_t), &dead);
-    return (dead <= m_maxElements) ? (m_maxElements - dead) : 0;
+
+    if (!m_aliveReadback)
+    {
+        glCreateBuffers(1, &m_aliveReadback);
+        glNamedBufferStorage(m_aliveReadback, sizeof(uint32_t), nullptr,
+            GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT | GL_CLIENT_STORAGE_BIT);
+        m_aliveMapped = static_cast<const uint32_t*>(glMapNamedBufferRange(
+            m_aliveReadback, 0, sizeof(uint32_t),
+            GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
+    }
+
+    // harvest the previous copy if the GPU has finished it (zero timeout = no stall)
+    if (m_aliveFence)
+    {
+        GLenum r = glClientWaitSync(m_aliveFence, 0, 0);
+        if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED)
+        {
+            m_cachedDeadCount = *m_aliveMapped;
+            glDeleteSync(m_aliveFence);
+            m_aliveFence = 0;
+        }
+    }
+
+    // kick off the next copy once the previous one has landed
+    if (!m_aliveFence)
+    {
+        glCopyNamedBufferSubData(m_deadCountBuffer, m_aliveReadback, 0, 0, sizeof(uint32_t));
+        m_aliveFence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    }
+
+    return (m_cachedDeadCount <= m_maxElements) ? (m_maxElements - m_cachedDeadCount) : 0;
 }
 
 uint32_t ParticleWorld::UploadEmitterData(float dt)
@@ -303,11 +370,17 @@ void ParticleWorld::Dispatch(float deltaTime)
     assert(m_initialized && "Dispatch before Initialize");
     if (!m_finalized) Finalize();   // append internal stages once
 
+    m_profiler.BeginFrame();
     m_totalTime += deltaTime;
 
     uint32_t spawnCount = UploadEmitterData(deltaTime);
     m_lastSpawnCount = spawnCount;
     UploadWorldParams(deltaTime);
+
+    // keygen re-compacts alive entries from scratch each frame
+    const uint32_t zero = 0;
+    glClearNamedBufferSubData(m_sortCountBuffer, GL_R32UI, 0, sizeof(uint32_t),
+                              GL_RED_INTEGER, GL_UNSIGNED_INT, &zero);
 
     BindBuffers();
     BindUBOs();
@@ -369,8 +442,7 @@ GLuint ParticleWorld::CreateTextureArray(const std::vector<const uint8_t*>& laye
     return m_textureArray;
 }
 
-// ---- lifetime LUT (colour + size over life) -----------------------------
-// EvalGradient / EvalCurve live in EmitterDesc.h (shared with the editor preview).
+
 
 void ParticleWorld::InitializeLifetimeLUTs()
 {
@@ -390,7 +462,8 @@ void ParticleWorld::InitializeLifetimeLUTs()
 }
 
 // Re-evaluate each emitter's curves into its LUT row. Row index = emitter index,
-// so the shaders sample the LUT by the particle's emitterIndex (no extra GPU field).
+// so the shaders sample the LUT by the particle's emitterIndex.
+// Only rows whose curves changed since the last bake are evaluated and uploaded
 void ParticleWorld::BakeLifetimeLUTs()
 {
     const uint32_t rows = static_cast<uint32_t>(m_emitters.size());
@@ -398,30 +471,32 @@ void ParticleWorld::BakeLifetimeLUTs()
 
     // RGBA16F rows uploaded as float (GL converts to half). Colour allows >1 for
     // HDR/emissive; scalar packs size in R with GBA reserved for future curves.
-    std::vector<glm::vec4> colour(size_t(k_lutWidth) * rows);
-    std::vector<glm::vec4> scalar(size_t(k_lutWidth) * rows);
+    std::vector<glm::vec4> colour(k_lutWidth);
+    std::vector<glm::vec4> scalar(k_lutWidth);
 
     for (uint32_t e = 0; e < rows; ++e)
     {
-        const ParticleEmitter& em = *m_emitters[e];
+        ParticleEmitter& em = *m_emitters[e];
+        if (!em.m_lutDirty) continue;
+        em.m_lutDirty = false;
+
         for (uint32_t i = 0; i < k_lutWidth; ++i)
         {
             float t = (k_lutWidth > 1) ? float(i) / float(k_lutWidth - 1) : 0.f;
-            size_t idx = size_t(e) * k_lutWidth + i;
-            colour[idx] = glm::max(EvalGradient(em.m_colourOverLife, em.m_colourStopCount, t), 0.f); // clamp negatives only
-            scalar[idx] = glm::vec4(EvalCurve(em.m_sizeOverLife, em.m_sizeKeyCount, t), 0.f, 0.f, 0.f);
+            colour[i] = glm::max(EvalGradient(em.m_colourOverLife, em.m_colourStopCount, t), 0.f); // clamp negatives only
+            scalar[i] = glm::vec4(EvalCurve(em.m_sizeOverLife, em.m_sizeKeyCount, t), 0.f, 0.f, 0.f);
         }
-    }
 
-    glTextureSubImage2D(m_lutColour, 0, 0, 0, k_lutWidth, rows, GL_RGBA, GL_FLOAT, colour.data());
-    glTextureSubImage2D(m_lutScalar, 0, 0, 0, k_lutWidth, rows, GL_RGBA, GL_FLOAT, scalar.data());
+        glTextureSubImage2D(m_lutColour, 0, 0, e, k_lutWidth, 1, GL_RGBA, GL_FLOAT, colour.data());
+        glTextureSubImage2D(m_lutScalar, 0, 0, e, k_lutWidth, 1, GL_RGBA, GL_FLOAT, scalar.data());
+    }
 }
 
 void ParticleWorld::Render()
 {
     assert(!m_renderStages.empty() && "no render stages");
 
-    BakeLifetimeLUTs();   // refresh colour/size-over-life rows (cheap; covers live edits)
+    BakeLifetimeLUTs();   // re-uploads only rows whose curves changed (covers live edits)
     BindUBOs();
 
     RenderContext ctx{};

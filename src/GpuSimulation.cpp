@@ -21,6 +21,7 @@ GpuSimulation::GpuSimulation(GpuSimulation&& o) noexcept
     , m_stages(std::move(o.m_stages))
     , m_renderStages(std::move(o.m_renderStages))
     , m_auxBuffers(std::move(o.m_auxBuffers))
+    , m_profiler(std::move(o.m_profiler))
     , m_initialized(std::exchange(o.m_initialized, false))
 {
 }
@@ -41,6 +42,7 @@ GpuSimulation& GpuSimulation::operator=(GpuSimulation&& o) noexcept
         m_stages = std::move(o.m_stages);
         m_renderStages = std::move(o.m_renderStages);
         m_auxBuffers = std::move(o.m_auxBuffers);
+        m_profiler = std::move(o.m_profiler);
         m_initialized = std::exchange(o.m_initialized, false);
     }
     return *this;
@@ -112,20 +114,25 @@ void GpuSimulation::RunStages(const SimContext& ctx)
 {
     for (auto& stage : m_stages)
     {
+        m_profiler.Begin(stage->GetDebugName());
         stage->Execute(ctx);
         GLbitfield bits = stage->GetBarrierBits();
         if (bits) glMemoryBarrier(bits);
+        m_profiler.End();
     }
 }
 
 void GpuSimulation::RunRenderStages(const RenderContext& ctx)
 {
+    m_profiler.Begin("Render");
     for (auto& stage : m_renderStages) stage->Render(ctx);
+    m_profiler.End();
 }
 
 void GpuSimulation::Dispatch(float deltaTime)
 {
     assert(m_initialized && !m_stages.empty());
+    m_profiler.BeginFrame();
     BindBuffers();
     SimContext ctx{ deltaTime, 0.f, m_maxElements, 0, 0 };
     RunStages(ctx);

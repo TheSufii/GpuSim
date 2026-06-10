@@ -137,4 +137,4 @@ namespace GPUSim {
         return { true, out.str(), {} };
     }
 
-} // namespace GPUSim
+} 

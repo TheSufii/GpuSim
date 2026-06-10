@@ -41,10 +41,10 @@ void main()
 
     if (partDepth <= sceneDepth)      return;   // in front of geometry, no contact
 
-    // world point on the visible surface along this view ray
+    
     vec3 sWorld = worldFromUV(uv, sceneDepth);
 
-    // thickness gate � skip if merely occluded by something closer, not actually touching
+    
     if (distance(pos, sWorld) > thickness) return;
 
     // real geometric normal from two reconstructed surface tangents
