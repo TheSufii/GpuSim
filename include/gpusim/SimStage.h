@@ -1,7 +1,7 @@
 #pragma once
 #include "SimContext.h"
 #include "SimBindings.h"
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <functional>
 #include <memory>
 #include <string>

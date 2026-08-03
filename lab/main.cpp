@@ -1,4 +1,4 @@
-#include <glad/glad.h>          
+#include <glad/gl.h>
 #include <SDL3/SDL.h>
 
 #include <imgui.h>
@@ -335,7 +335,7 @@ int main(int, char**)
     if (!gl) { std::fprintf(stderr, "[lab] GL context failed: %s\n", SDL_GetError()); return 1; }
     SDL_GL_MakeCurrent(window, gl);
 
-    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
+    if (!gladLoadGL(SDL_GL_GetProcAddress)) {
         std::fprintf(stderr, "[lab] gladLoadGLLoader failed\n");
         return 1;
     }

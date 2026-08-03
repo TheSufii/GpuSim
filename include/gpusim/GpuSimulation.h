@@ -4,7 +4,7 @@
 #include "RenderStage.h"
 #include "ParticleTypes.h"
 #include "GpuProfiler.h"
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <vector>
 #include <memory>
 #include <string>

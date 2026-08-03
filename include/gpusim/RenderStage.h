@@ -1,6 +1,6 @@
 #pragma once
 #include "SimBindings.h"
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <cassert>
 
 struct RenderContext
