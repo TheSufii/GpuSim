@@ -14,11 +14,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
+option(GPUSIM_EXTERNAL_GLAD "Use a pre-defined glad_gl target instead of internal GLAD" OFF)
 
-if(NOT TARGET glad)
-    add_library(glad STATIC "${TP}/glad/src/glad.c")
-    target_include_directories(glad PUBLIC "${TP}/glad/include")
+if (GPUSIM_EXTERNAL_GLAD)
+    if(NOT TARGET glad_gl)
+        message(FATAL_ERROR
+                "[GPUSIM] GPUSIM is ON but glad_gl target not found. Make sure you define it before adding GpuSim.")
+    endif()
+else()
+    if(NOT TARGET glad_gl)
+        add_library(glad_gl STATIC "${TP}/glad/src/glad.c")
+        target_include_directories(glad_gl PUBLIC "${TP}/glad/include")
+    endif()
 endif()
+
 if(NOT TARGET glm)
     add_library(glm INTERFACE)
     target_include_directories(glm INTERFACE "${TP}/glm")
@@ -42,7 +51,7 @@ add_library(GpuSim STATIC
 target_include_directories(GpuSim PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/gpusim")
-target_link_libraries(GpuSim PUBLIC glad glm nlohmann_json)
+target_link_libraries(GpuSim PUBLIC glad_gl glm nlohmann_json)
 if(MSVC)
     target_compile_options(GpuSim PRIVATE /utf-8)
 endif()
@@ -78,7 +87,7 @@ if(PROJECT_IS_TOP_LEVEL)
     target_link_libraries(imgui PUBLIC SDL3)
 
     add_executable(GpuSimLab lab/main.cpp lab/stb_impl.cpp)
-    target_link_libraries(GpuSimLab PRIVATE GpuSim imgui SDL3 glad stb OpenGL::GL)
+    target_link_libraries(GpuSimLab PRIVATE GpuSim imgui SDL3 glad_gl stb OpenGL::GL)
     target_compile_definitions(GpuSimLab PRIVATE
         GPUSIM_LAB_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders/particles/"
         GPUSIM_LAB_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/lab/assets/")
