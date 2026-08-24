@@ -32,6 +32,39 @@ namespace {
 
 constexpr uint32_t kMaxParticles = 1u << 20;   // 1,048,576 (multiple of 256)
 
+
+fs::path ResolveDataDir(const char* relToExe, const char* sourceFallback)
+{
+    std::error_code ec;
+    if (const char* base = SDL_GetBasePath()) {
+        fs::path p = fs::path(base) / relToExe;
+        if (fs::is_directory(p, ec)) return p;
+    }
+    if (sourceFallback && *sourceFallback) {
+        fs::path p(sourceFallback);
+        if (fs::is_directory(p, ec)) return p;
+    }
+    return {};
+}
+
+// ParticleWorld builds shader paths by string concatenation, so hand it a
+// trailing separator.
+std::string DirArg(const fs::path& p)
+{
+    std::string s = p.string();
+    if (!s.empty() && s.back() != '/' && s.back() != '\\') s += '/';
+    return s;
+}
+
+// stderr disappears with the console when the app is started from Explorer, so
+// anything that stops startup also gets a dialog the user can actually read.
+int Fatal(const std::string& msg)
+{
+    std::fprintf(stderr, "[lab] fatal: %s\n", msg.c_str());
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "GpuSimLab", msg.c_str(), nullptr);
+    return 1;
+}
+
 // Per-emitter lab state. `ptr` is owned by the world and stays valid for the
 // world's lifetime (slots are recycled in place), so a raw pointer is safe.
 struct EmitterEntry {
@@ -203,11 +236,12 @@ GLuint CompileProgram(const char* vs, const char* fs)
     return p;
 }
 
-std::vector<std::string> ScanAssets(const char* ext)
+std::vector<std::string> ScanAssets(const fs::path& assetDir, const char* ext)
 {
     std::vector<std::string> out;
+    if (assetDir.empty()) return out;
     std::error_code ec;
-    for (auto& e : fs::directory_iterator(GPUSIM_LAB_ASSET_DIR, ec)) {
+    for (auto& e : fs::directory_iterator(assetDir, ec)) {
         if (ec) break;
         if (e.is_regular_file() && e.path().extension() == ext)
             out.push_back(e.path().filename().string());
@@ -318,10 +352,24 @@ void DrawEmitterProperties(EmitterEntry& en, const std::vector<LoadedTexture>& t
 int main(int, char**)
 {
    
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        std::fprintf(stderr, "[lab] SDL_Init failed: %s\n", SDL_GetError());
-        return 1;
-    }
+    if (!SDL_Init(SDL_INIT_VIDEO))
+        return Fatal(std::string("SDL_Init failed: ") + SDL_GetError());
+
+    // Locate the data before touching the GPU, so a mis-packaged build says so
+    // instead of dying halfway through shader compilation.
+    const fs::path shaderDir = ResolveDataDir("shaders/particles", GPUSIM_LAB_SHADER_DIR);
+    const fs::path assetDir  = ResolveDataDir("assets",            GPUSIM_LAB_ASSET_DIR);
+    const char*    exeDir    = SDL_GetBasePath();
+    if (shaderDir.empty())
+        return Fatal("Could not find the shader files.\n\n"
+                     "'shaders\\particles\\' must sit next to GpuSimLab.exe.\n\n"
+                     "Looked next to: " + std::string(exeDir ? exeDir : "<unknown>"));
+    if (assetDir.empty())
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "GpuSimLab",
+                                 "Could not find the 'assets' folder next to GpuSimLab.exe.\n\n"
+                                 "The lab will start, but no textures or emitter presets "
+                                 "will be available.", nullptr);
+
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -329,16 +377,20 @@ int main(int, char**)
 
     SDL_Window* window = SDL_CreateWindow("GpuSimLab", 1600, 900,
                                           SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    if (!window) { std::fprintf(stderr, "[lab] CreateWindow failed: %s\n", SDL_GetError()); return 1; }
+    if (!window)
+        return Fatal(std::string("Could not create a window: ") + SDL_GetError());
 
     SDL_GLContext gl = SDL_GL_CreateContext(window);
-    if (!gl) { std::fprintf(stderr, "[lab] GL context failed: %s\n", SDL_GetError()); return 1; }
+    if (!gl)
+        return Fatal("Could not create an OpenGL 4.5 core context.\n\n"
+                     "This app needs a GPU and driver with OpenGL 4.5 support "
+                     "(compute shaders). On a laptop with switchable graphics, try "
+                     "forcing it onto the dedicated GPU.\n\nSDL says: "
+                     + std::string(SDL_GetError()));
     SDL_GL_MakeCurrent(window, gl);
 
-    if (!gladLoadGL(SDL_GL_GetProcAddress)) {
-        std::fprintf(stderr, "[lab] gladLoadGLLoader failed\n");
-        return 1;
-    }
+    if (!gladLoadGL(SDL_GL_GetProcAddress))
+        return Fatal("Failed to load OpenGL function pointers (glad).");
     SDL_GL_SetSwapInterval(1);  
 
    
@@ -350,14 +402,14 @@ int main(int, char**)
     ImGui_ImplOpenGL3_Init("#version 450");
 
 
-    GLuint billboard = CompileBillboard(GPUSIM_LAB_SHADER_DIR);
-    if (billboard == 0) {
-        std::fprintf(stderr, "[lab] fatal: billboard shader failed to build — see errors above\n");
-        return 1;
-    }
+    GLuint billboard = CompileBillboard(shaderDir);
+    if (billboard == 0)
+        return Fatal("The billboard shader failed to build.\n\nShaders were read from:\n"
+                     + shaderDir.string() + "\n\nRun from a console to see the compiler log.");
 
+    const std::string shaderDirArg = DirArg(shaderDir);
     ParticleWorld world;
-    world.Initialize(kMaxParticles, GPUSIM_LAB_SHADER_DIR);
+    world.Initialize(kMaxParticles, shaderDirArg.c_str());
     world.SetupDefault(billboard);
     world.SetNearFar(0.1f, 1000.f);
 
@@ -369,8 +421,8 @@ int main(int, char**)
     std::vector<std::string>    texFiles, emitterFiles;
 
     auto refreshFiles = [&]() {
-        texFiles     = ScanAssets(".png");
-        emitterFiles = ScanAssets(".emitter");
+        texFiles     = ScanAssets(assetDir, ".png");
+        emitterFiles = ScanAssets(assetDir, ".emitter");
     };
 
    
@@ -385,7 +437,7 @@ int main(int, char**)
             for (int i = 0; i < (int)textures.size(); ++i)
                 if (textures[i].name == f0) return i;
 
-            std::string full = (fs::path(GPUSIM_LAB_ASSET_DIR) / (name + ".png")).string();
+            std::string full = (assetDir / (name + ".png")).string();
             int base = (int)textures.size();
             int added = LoadFlipbookFrames(full.c_str(), 256, cols, rows, textures);
             if (added == 0) return -1;
@@ -396,7 +448,7 @@ int main(int, char**)
         for (int i = 0; i < (int)textures.size(); ++i)
             if (textures[i].name == name) return i;           // dedup
         LoadedTexture t; t.name = name;
-        std::string full = (fs::path(GPUSIM_LAB_ASSET_DIR) / (name + ".png")).string();
+        std::string full = (assetDir / (name + ".png")).string();
         if (!LoadPixels(full.c_str(), 256, t.px)) return -1;
         textures.push_back(std::move(t));
         RebuildTextureArray(world, textures);
@@ -420,7 +472,7 @@ int main(int, char**)
         if (selected >= (int)emitters.size()) selected = (int)emitters.size() - 1;
     };
     auto loadEmitterInto = [&](EmitterEntry& en, const std::string& fname) {
-        std::ifstream in(fs::path(GPUSIM_LAB_ASSET_DIR) / fname);
+        std::ifstream in(assetDir / fname);
         if (!in) { std::fprintf(stderr, "[lab] cannot open %s\n", fname.c_str()); return; }
         nlohmann::json j;
         try { in >> j; }
@@ -444,7 +496,7 @@ int main(int, char**)
            
             if (en.desc.frameCount > 1) tex = gpusim::FlipbookStemFromFrame(tex);
         }
-        std::ofstream out(fs::path(GPUSIM_LAB_ASSET_DIR) / fname);
+        std::ofstream out(assetDir / fname);
         if (!out) { std::fprintf(stderr, "[lab] cannot write %s\n", fname.c_str()); return; }
         out << EmitterDescToJson(en.desc, tex).dump(2);
         refreshFiles();

@@ -151,8 +151,15 @@ void GpuSimulation::Render()
 GLuint GpuSimulation::LoadComputeShader(const std::string& path)
 {
 
+    // NDEBUG strips the asserts below, so every failure path also has to bail
+    // out on its own — otherwise a release build feeds an empty source string
+    // to the driver and carries on with a garbage program object.
     GPUSim::PreprocessResult pp = GPUSim::PreprocessShader(path);
-    assert(pp.success && pp.error.c_str());
+    if (!pp.success) {
+        std::fprintf(stderr, "GpuSimulation: %s\n", pp.error.c_str());
+        assert(false && "compute shader preprocess failed");
+        return 0;
+    }
 
     const char* src = pp.source.c_str();
 
@@ -163,16 +170,18 @@ GLuint GpuSimulation::LoadComputeShader(const std::string& path)
     glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
     if (!ok) { char log[1024]; glGetShaderInfoLog(shader, 1024, nullptr, log);
                std::fprintf(stderr, "GpuSimulation: compute compile failed (%s):\n%s\n", path.c_str(), log);
-               assert(false && "compute shader compile failed"); }
+               assert(false && "compute shader compile failed");
+               glDeleteShader(shader); return 0; }
 
     GLuint program = glCreateProgram();
     glAttachShader(program, shader);
     glLinkProgram(program);
     glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    glDeleteShader(shader);
     if (!ok) { char log[1024]; glGetProgramInfoLog(program, 1024, nullptr, log);
                std::fprintf(stderr, "GpuSimulation: compute link failed (%s):\n%s\n", path.c_str(), log);
-               assert(false && "compute shader link failed"); }
+               assert(false && "compute shader link failed");
+               glDeleteProgram(program); return 0; }
 
-    glDeleteShader(shader);
     return program;
 }

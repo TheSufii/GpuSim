@@ -95,7 +95,12 @@ void ParticleWorld::Initialize(uint32_t maxParticles, const char* shaderDir)
         "maxParticles must be a multiple of 256");
     assert(shaderDir != nullptr);
 
+    // shader paths are built by concatenation below, so tolerate a caller that
+    // passes the directory without a trailing separator
     m_shaderDir = shaderDir;
+    if (!m_shaderDir.empty() && m_shaderDir.back() != '/' && m_shaderDir.back() != '\\')
+        m_shaderDir += '/';
+
     GpuSimulation::Initialize(maxParticles, sizeof(Particle));
 
     InitializeDeadList();

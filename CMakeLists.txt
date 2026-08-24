@@ -5,14 +5,21 @@ if(POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
       "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL" CACHE STRING "" FORCE)
-
 project(GpuSim CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+
+if(MSVC AND PROJECT_IS_TOP_LEVEL)
+    option(GPUSIM_STATIC_CRT "Link the static MSVC runtime so the build needs no VC++ redistributable" ON)
+    if(GPUSIM_STATIC_CRT)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    else()
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
+endif()
 
 option(GPUSIM_EXTERNAL_GLAD "Use a pre-defined glad_gl target instead of internal GLAD" OFF)
 
@@ -46,8 +53,7 @@ add_library(GpuSim STATIC
     src/ParticleWorldRegistry.cpp
     src/ShaderPreprocessor.cpp)
 
-# include/        → consumers: #include <gpusim/ParticleWorld.h>
-# include/gpusim/ → internal + flat cross-header includes ("ParticleWorld.h")
+
 target_include_directories(GpuSim PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/gpusim")
@@ -88,9 +94,18 @@ if(PROJECT_IS_TOP_LEVEL)
 
     add_executable(GpuSimLab lab/main.cpp lab/stb_impl.cpp)
     target_link_libraries(GpuSimLab PRIVATE GpuSim imgui SDL3 glad_gl stb OpenGL::GL)
-    target_compile_definitions(GpuSimLab PRIVATE
-        GPUSIM_LAB_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders/particles/"
-        GPUSIM_LAB_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/lab/assets/")
+
+ 
+    option(GPUSIM_EMBED_SOURCE_PATHS "Bake the source-tree data paths in as a dev fallback" ON)
+    if(GPUSIM_EMBED_SOURCE_PATHS)
+        target_compile_definitions(GpuSimLab PRIVATE
+            GPUSIM_LAB_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders/particles/"
+            GPUSIM_LAB_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/lab/assets/")
+    else()
+        target_compile_definitions(GpuSimLab PRIVATE
+            GPUSIM_LAB_SHADER_DIR=""
+            GPUSIM_LAB_ASSET_DIR="")
+    endif()
     if(MSVC)
         target_compile_options(GpuSimLab PRIVATE /utf-8)
     endif()
@@ -108,4 +123,22 @@ if(PROJECT_IS_TOP_LEVEL)
     add_custom_command(TARGET GpuSimLab POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/lab/assets" "$<TARGET_FILE_DIR:GpuSimLab>/assets")
+
+
+    install(TARGETS GpuSimLab RUNTIME DESTINATION .)
+    install(FILES "${TP}/SDL3/SDL3.dll" DESTINATION .)
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/shaders/"    DESTINATION shaders)
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lab/assets/" DESTINATION assets)
+    if(MSVC AND NOT GPUSIM_STATIC_CRT)
+        # DLL runtime: ship the redistributable DLLs so the package still runs
+        # on a machine without the matching VC++ redistributable installed.
+        set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+        include(InstallRequiredSystemLibraries)
+    endif()
+
+    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_PACKAGE_NAME "GpuSimLab")
+    set(CPACK_PACKAGE_FILE_NAME "GpuSimLab-win64")
+    set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/package")
+    include(CPack)
 endif()
