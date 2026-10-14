@@ -420,7 +420,8 @@ GLuint ParticleWorld::CreateTextureArray(const std::vector<const uint8_t*>& laye
     uint32_t mips = 1;
     for (uint32_t r = resolution; r > 1; r >>= 1) ++mips;
 
-    glTextureStorage3D(m_textureArray, mips, GL_RGBA8, resolution, resolution, layers);
+    // sRGB: sprites are colour, so the GPU converts them to linear when sampling
+    glTextureStorage3D(m_textureArray, mips, GL_SRGB8_ALPHA8, resolution, resolution, layers);
 
     // upload each layer — caller guarantees resolution x resolution x 4 RGBA8 bytes
     for (uint32_t layer = 0; layer < layers; ++layer)

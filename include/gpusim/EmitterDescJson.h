@@ -41,6 +41,7 @@ inline nlohmann::json EmitterDescToJson(const EmitterDesc& d, const std::string&
         {"noiseScale", d.noiseScale},
         {"noiseScrollSpeed", d.noiseScrollSpeed},
         {"colour", v4(d.colour)},
+        {"intensity", d.intensity},
         {"colourVariance", v3(d.colourVariance)},
         {"blendMode", (uint32_t)d.blendMode},
         {"useCollision", d.useCollision},
@@ -94,6 +95,7 @@ inline void EmitterDescFromJson(const nlohmann::json& j, EmitterDesc& d, std::st
     d.noiseScale        = j.value("noiseScale", d.noiseScale);
     d.noiseScrollSpeed  = j.value("noiseScrollSpeed", d.noiseScrollSpeed);
     d.colour            = getv4(j.value("colour", nlohmann::json()), d.colour);
+    d.intensity         = j.value("intensity", d.intensity);
     d.colourVariance    = getv3(j.value("colourVariance", nlohmann::json()), d.colourVariance);
     d.blendMode         = (BlendMode) j.value("blendMode", 1u);
     d.useCollision      = j.value("useCollision", d.useCollision);

@@ -297,6 +297,7 @@ void DrawEmitterProperties(EmitterEntry& en, const std::vector<LoadedTexture>& t
     if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
         ch |= ImGui::ColorEdit4("colour", &d.colour.x,
                                 ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_AlphaBar);
+        ch |= ImGui::DragFloat("intensity", &d.intensity, 0.05f, 0.f, 1000.f);
         ch |= ImGui::DragFloat3("colour variance", &d.colourVariance.x, 0.005f, 0.f, 1.f);
         int bl = (int)d.blendMode;
         if (ImGui::Combo("blend", &bl, "Additive\0AlphaBlend\0")) { d.blendMode = (BlendMode)bl; ch = true; }

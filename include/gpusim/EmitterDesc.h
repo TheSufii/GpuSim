@@ -55,6 +55,7 @@ struct EmitterDesc
     float noiseScrollSpeed = 0.f;
 
     glm::vec4 colour        = glm::vec4(1.f);     // overall multiplier on the colour-over-life gradient
+    float     intensity     = 1.f;                // multiplies colour.rgb; above 1 for HDR / emissive
     glm::vec3 colourVariance = glm::vec3(0.f);    // per-channel random ± applied per particle at spawn (0 = uniform)
     BlendMode blendMode     = BlendMode::AlphaBlend;
 
@@ -130,6 +131,7 @@ inline float EvalCurve(const CurveKey* keys, uint32_t count, float t)
     return keys[count - 1].value;
 }
 
-// the cooked .demitter writes EmitterDesc raw, so it must stay trivially copyable
+// hosts copy and compare EmitterDesc as raw memory (and a version-1 .demitter stored it that way),
+// so it must stay trivially copyable
 static_assert(std::is_trivially_copyable_v<EmitterDesc>,
-              "EmitterDesc must stay trivially copyable for raw .demitter serialization");
+              "EmitterDesc must stay trivially copyable");

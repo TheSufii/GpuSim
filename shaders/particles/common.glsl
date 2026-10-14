@@ -82,6 +82,7 @@ struct EmitterData
 
     vec4  colourVariance;    // rgb = per-channel random ± amount at spawn (0 = none); w reserved
     vec4  collisionParams;   // x = thickness gate, y = surface separation; zw reserved
+    vec4  tangent;           // xyz = the emission shape's local +X in world space; zero = derive from direction
 };
 
 struct SortEntry { uint particleIndex; uint depthBits; };
@@ -135,15 +136,21 @@ vec3 randomConeDir(vec3 dir, float spread, uint seed)
     return normalize(tan * (s * cos(phi)) + bit * (s * sin(phi)) + dir * z);
 }
 
-// random spawn offset within an emission shape, oriented by dir (= local +Y)
-vec3 sampleShapeOffset(uint shape, vec3 size, vec3 dir, uint seed)
+// random spawn offset within an emission shape. dir = the shape's local +Y,
+// tangent = its local +X (zero: one is derived from dir)
+vec3 sampleShapeOffset(uint shape, vec3 size, vec3 dir, vec3 tangent, uint seed)
 {
     if (shape == SHAPE_POINT) return vec3(0.0);
 
-    vec3 d  = normalize(dir);
-    vec3 up = abs(d.y) < 0.999 ? vec3(0,1,0) : vec3(1,0,0);
-    vec3 t  = normalize(cross(up, d));
-    vec3 b  = cross(d, t);
+    vec3 d = normalize(dir);
+    vec3 t = tangent - d * dot(tangent, d);
+    if (dot(t, t) < 1e-6)
+    {
+        vec3 up = abs(d.y) < 0.999 ? vec3(0,1,0) : vec3(1,0,0);
+        t = cross(up, d);
+    }
+    t = normalize(t);
+    vec3 b = cross(d, t);
 
     if (shape == SHAPE_BOX)
         return t * randRange(seed + 10u, -size.x, size.x)

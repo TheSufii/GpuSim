@@ -40,7 +40,7 @@ void main()
 
     // distribute the spawn position within the emission shape
     vec3  offset = sampleShapeOffset(uint(em.emissionShape.x), em.emissionShape.yzw,
-                                     em.direction.xyz, seed + 5u);
+                                     em.direction.xyz, em.tangent.xyz, seed + 5u);
 
     // optionally bias the launch direction outward from the shape (radial)
     if (em.shapeDirection > 0.0 && dot(offset, offset) > 1e-8)

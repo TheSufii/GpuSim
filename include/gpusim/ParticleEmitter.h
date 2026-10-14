@@ -24,6 +24,7 @@ public:
     void SetNoiseScale(float s);
     void SetNoiseScrollSpeed(float s);
     void SetColour(const glm::vec4& c);
+    void SetIntensity(float i);                            // multiplies colour.rgb
     void SetColourVariance(const glm::vec3& v);            // per-channel random ± at spawn
     void SetBlendMode(BlendMode m);
     void SetAttractor(const glm::vec3& worldPos, float strength);
@@ -45,6 +46,7 @@ public:
     // ECS facing — world space, resolved each frame
     void SetWorldPosition(const glm::vec3& v);
     void SetWorldDirection(const glm::vec3& v);
+    void SetWorldTangent(const glm::vec3& v);              // emission shape's +X; zero = derived from direction
     void SetGravity(const glm::vec3& worldGravity);
 
     glm::vec3 GetLocalOffset()    const { return m_localOffset; }
@@ -69,6 +71,7 @@ private:
     glm::vec3 m_localDirection = glm::vec3(0, 1, 0);
     glm::vec3 m_worldPosition = glm::vec3(0.f);
     glm::vec3 m_worldDirection = glm::vec3(0, 1, 0);
+    glm::vec3 m_worldTangent = glm::vec3(0.f);
     glm::vec3 m_gravity = glm::vec3(0, -9.8f, 0);
 
     float    m_spawnRate = 100.f;
@@ -91,6 +94,7 @@ private:
     bool      m_useAttractor = false;
 
     glm::vec4 m_colour = glm::vec4(1.f);
+    float     m_intensity = 1.f;
     glm::vec3 m_colourVariance = glm::vec3(0.f);
     BlendMode m_blendMode = BlendMode::AlphaBlend;
 

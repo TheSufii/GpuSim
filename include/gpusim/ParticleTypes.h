@@ -31,7 +31,7 @@ enum class EmissionMode : uint32_t
 };
 
 // Where particles are born (offset from the emitter position). Oriented by the
-// emit direction (direction = the shape's local +Y).
+// emit direction (direction = the shape's local +Y) and the tangent (its local +X).
 enum class EmissionShape : uint32_t
 {
     Point  = 0,                   // single point (legacy behaviour)
@@ -92,6 +92,7 @@ struct GpuEmitterData
 
     glm::vec4 colourVariance;     // rgb = per-channel random ± amount at spawn (0 = none); w reserved
     glm::vec4 collisionParams;    // x = thickness gate, y = surface separation; zw reserved
+    glm::vec4 tangent;            // xyz = the emission shape's local +X in world space; zero = derive from direction
 };
 
 struct DrawArraysIndirectCommand
@@ -128,7 +129,7 @@ struct CameraParams
 
 // if these fire, the struct layout no longer matches std430
 static_assert(sizeof(Particle) == 48, "Particle layout mismatch");
-static_assert(sizeof(GpuEmitterData) == 224, "GpuEmitterData layout mismatch");
+static_assert(sizeof(GpuEmitterData) == 240, "GpuEmitterData layout mismatch");
 static_assert(sizeof(DrawArraysIndirectCommand) == 16, "DrawCommand layout mismatch");
 static_assert(sizeof(SortEntry) == 8, "SortEntry layout mismatch");
 static_assert(sizeof(WorldParams) == 16, "WorldParams layout mismatch");

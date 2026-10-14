@@ -10,6 +10,7 @@ void ParticleEmitter::SetNoiseStrength(float s) { m_noiseStrength = s; }
 void ParticleEmitter::SetNoiseScale(float s) { m_noiseScale = s; }
 void ParticleEmitter::SetNoiseScrollSpeed(float s) { m_noiseScrollSpeed = s; }
 void ParticleEmitter::SetColour(const glm::vec4& c) { m_colour = c; }
+void ParticleEmitter::SetIntensity(float i) { m_intensity = i; }
 void ParticleEmitter::SetColourVariance(const glm::vec3& v) { m_colourVariance = v; }
 void ParticleEmitter::SetBlendMode(BlendMode m) { m_blendMode = m; }
 void ParticleEmitter::SetUseAttractor(bool b) { m_useAttractor = b; }
@@ -20,6 +21,7 @@ void ParticleEmitter::SetCollisionSeparation(float s) { m_collisionSeparation = 
 void ParticleEmitter::SetActive(bool b) { m_active = b; }
 void ParticleEmitter::SetWorldPosition(const glm::vec3& v) { m_worldPosition = v; }
 void ParticleEmitter::SetWorldDirection(const glm::vec3& v) { m_worldDirection = v; }
+void ParticleEmitter::SetWorldTangent(const glm::vec3& v) { m_worldTangent = v; }
 void ParticleEmitter::SetGravity(const glm::vec3& g) { m_gravity = g; }
 
 void ParticleEmitter::SetLifetimeRange(float lo, float hi) { m_minLifetime = lo; m_maxLifetime = hi; }
@@ -70,7 +72,7 @@ GpuEmitterData ParticleEmitter::BuildGpuData(float deltaTime)
     d.direction = glm::vec4(m_worldDirection, 0.f);
     d.gravity = glm::vec4(m_gravity, 0.f);
     d.attractorPos = glm::vec4(m_attractorPos, m_attractorStrength);
-    d.colour = m_colour;
+    d.colour = glm::vec4(glm::vec3(m_colour) * m_intensity, m_colour.a);
     d.spread = m_spread;
     d.minSpeed = m_minSpeed;
     d.maxSpeed = m_maxSpeed;
@@ -99,6 +101,7 @@ GpuEmitterData ParticleEmitter::BuildGpuData(float deltaTime)
                                 m_emissionShapeSize.x, m_emissionShapeSize.y, m_emissionShapeSize.z);
     d.colourVariance = glm::vec4(m_colourVariance, 0.f);
     d.collisionParams = glm::vec4(m_collisionThickness, m_collisionSeparation, 0.f, 0.f);
+    d.tangent = glm::vec4(m_worldTangent, 0.f);
     return d;
 }
 
@@ -121,6 +124,7 @@ void ParticleEmitter::Configure(const EmitterDesc& desc)
     m_noiseScale       = desc.noiseScale;
     m_noiseScrollSpeed = desc.noiseScrollSpeed;
     m_colour           = desc.colour;
+    m_intensity        = desc.intensity;
     m_colourVariance   = desc.colourVariance;
     m_blendMode        = desc.blendMode;
     m_useCollision     = desc.useCollision;
@@ -176,6 +180,7 @@ EmitterDesc ParticleEmitter::ToDesc() const
     d.noiseScale       = m_noiseScale;
     d.noiseScrollSpeed = m_noiseScrollSpeed;
     d.colour           = m_colour;
+    d.intensity        = m_intensity;
     d.colourVariance   = m_colourVariance;
     d.blendMode        = m_blendMode;
     d.useCollision     = m_useCollision;
