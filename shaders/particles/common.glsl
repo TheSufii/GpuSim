@@ -21,7 +21,7 @@
 #define ANIM_LOOP      1u
 
 // lifetime LUT atlas height (mirror k_maxEmitters in ParticleWorld.h)
-#define MAX_EMITTERS   64u
+#define MAX_EMITTERS   128u
 
 // emission shapes (mirror EmissionShape in ParticleTypes.h)
 #define SHAPE_POINT    0u

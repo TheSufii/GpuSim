@@ -134,7 +134,7 @@ private:
     std::string            m_name = "Particle World";
     uint32_t               m_lastSpawnCount = 0;
 
-    static constexpr uint32_t k_maxEmitters = 64;
+    static constexpr uint32_t k_maxEmitters = 128;
     static constexpr uint32_t k_radixBuckets = 256;
     static constexpr uint32_t k_threadGroup = 256;
 
