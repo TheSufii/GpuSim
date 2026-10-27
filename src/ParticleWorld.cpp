@@ -259,7 +259,8 @@ ParticleEmitter* ParticleWorld::CreateEmitter()
         }
     }
 
-    assert(m_emitters.size() < k_maxEmitters && "max emitters reached — none free to recycle yet");
+    // full: a release build would otherwise overflow the emitter buffer and the LUT atlas
+    if (m_emitters.size() >= k_maxEmitters) return nullptr;
     auto e = std::make_unique<ParticleEmitter>();
     e->m_index = static_cast<uint32_t>(m_emitters.size());
     ParticleEmitter* ptr = e.get();
@@ -270,8 +271,32 @@ ParticleEmitter* ParticleWorld::CreateEmitter()
 ParticleEmitter* ParticleWorld::CreateEmitter(const EmitterDesc& desc)
 {
     ParticleEmitter* e = CreateEmitter();
-    e->Configure(desc);
+    if (e) e->Configure(desc);
     return e;
+}
+
+void ParticleWorld::Clear()
+{
+    m_emitters.clear();
+    m_freeSlots.clear();
+    m_lastSpawnCount = 0;
+
+    if (!m_initialized) return;   // CPU-only use (tests): no GPU particles to kill
+
+    // lifetime 0 is dead to every stage, so zeroing the pool kills every particle
+    const uint32_t zero = 0;
+    glClearNamedBufferData(m_primaryBuffer, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, &zero);
+
+    // every index goes back on the dead list. It has no dynamic storage, so refill it by copy.
+    std::vector<uint32_t> idx(m_maxElements);
+    for (uint32_t i = 0; i < m_maxElements; ++i) idx[i] = i;
+    GLuint staging = 0;
+    glCreateBuffers(1, &staging);
+    glNamedBufferStorage(staging, m_maxElements * sizeof(uint32_t), idx.data(), 0);
+    glCopyNamedBufferSubData(staging, m_deadListBuffer, 0, 0, m_maxElements * sizeof(uint32_t));
+    glDeleteBuffers(1, &staging);
+
+    glClearNamedBufferData(m_deadCountBuffer, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, &m_maxElements);
 }
 
 void ParticleWorld::DestroyEmitter(ParticleEmitter* e)

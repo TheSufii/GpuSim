@@ -40,9 +40,15 @@ public:
 
     void SetParticleTextureArray(GLuint arr) { m_textureArray = arr; m_ownsTextureArray = false; }
 
+    // nullptr when every slot is taken (destroyed slots stay taken until their particles die)
     ParticleEmitter* CreateEmitter();
     ParticleEmitter* CreateEmitter(const EmitterDesc& desc);   // create, then Configure
     void DestroyEmitter(ParticleEmitter* e);
+
+    // Removes every emitter and kills every live particle, so every slot is free at once.
+    // For a scene reload, where DestroyEmitter would hold each old slot until its particles die.
+    // Invalidates every emitter pointer and index handed out so far.
+    void Clear();
 
     // indices are stable (DestroyEmitter deactivates but keeps the slot)
     ParticleEmitter*       GetEmitter(uint32_t index)       { return index < m_emitters.size() ? m_emitters[index].get() : nullptr; }
